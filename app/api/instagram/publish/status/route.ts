@@ -9,11 +9,11 @@ import {
 /**
  * GET /api/instagram/publish/status?carouselId=...
  *
- * Returns the current Carousel.status + instagramId, for the editor UI to
- * poll while a publish is in flight (POST /api/instagram/publish returns
- * only once the whole Graph API flow finishes, but the UI can start
- * polling this immediately after firing that request if it wants earlier
- * feedback).
+ * Returns the current Carousel.status + instagramId (+ permalink, once
+ * PUBLISHED), for the editor UI to poll while a publish is in flight (POST
+ * /api/instagram/publish returns only once the whole Graph API flow
+ * finishes, but the UI can start polling this immediately after firing that
+ * request if it wants earlier feedback).
  */
 export async function GET(request: Request) {
   const session = await auth();

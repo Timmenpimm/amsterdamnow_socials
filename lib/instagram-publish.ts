@@ -13,9 +13,11 @@ import { getInstagramConnectionCredentials } from "@/lib/connections/instagram";
 import { db } from "@/lib/db";
 import {
   InstagramApiError,
+  MOCK_MEDIA_ID,
   MissingInstagramCredentialsError,
   TooFewSlidesError,
   TooManySlidesError,
+  graphRequest,
   publishCarousel,
 } from "@/lib/instagram";
 import { publicSlideUrl } from "@/lib/public-render";
@@ -170,10 +172,41 @@ async function setCarouselPublished(
   });
 }
 
-/** Current status + instagramId, for the editor's publish-progress polling. */
+const MOCK_PERMALINK = `https://www.instagram.com/p/${MOCK_MEDIA_ID}/`;
+
+/**
+ * Looks up the public permalink for a published media object. `instagramId`
+ * is a real Graph API media id (the one publishCarousel() returns), so this
+ * is a legitimate follow-up call, not a guess. Returns null instead of
+ * throwing on any failure (expired token, deleted post, transient error) —
+ * this only backs a "view on Instagram" link, so a lookup failure shouldn't
+ * break the publish-status response the editor polls.
+ */
+async function getMediaPermalink(
+  accessToken: string,
+  instagramId: string
+): Promise<string | null> {
+  if (process.env.MOCK_INSTAGRAM === "1") {
+    return MOCK_PERMALINK;
+  }
+
+  try {
+    const data = await graphRequest<{ permalink?: string }>(
+      `/${encodeURIComponent(instagramId)}`,
+      { fields: "permalink", access_token: accessToken },
+      "GET"
+    );
+    return data.permalink ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Current status + instagramId + permalink (once known), for the editor's publish-progress polling. */
 export interface CarouselPublishStatus {
   status: CarouselStatus;
   instagramId: string | null;
+  permalink: string | null;
 }
 
 export async function getCarouselPublishStatusForUser(
@@ -181,5 +214,14 @@ export async function getCarouselPublishStatusForUser(
   userId: string
 ): Promise<CarouselPublishStatus> {
   const carousel = await getCarouselForUser(carouselId, userId);
-  return { status: carousel.status, instagramId: carousel.instagramId };
+
+  let permalink: string | null = null;
+  if (carousel.status === "PUBLISHED" && carousel.instagramId) {
+    const credentials = await getInstagramConnectionCredentials(userId);
+    if (credentials) {
+      permalink = await getMediaPermalink(credentials.accessToken, carousel.instagramId);
+    }
+  }
+
+  return { status: carousel.status, instagramId: carousel.instagramId, permalink };
 }

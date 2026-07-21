@@ -74,8 +74,8 @@ interface GraphErrorBody {
   };
 }
 
-/** Shared request helper for every Graph API call below. */
-async function graphRequest<T>(
+/** Shared request helper for every Graph API call — exported so lib/instagram-publish.ts can reuse it for its own narrow calls (media permalink lookup). */
+export async function graphRequest<T>(
   path: string,
   params: Record<string, string>,
   method: "GET" | "POST"
@@ -240,7 +240,7 @@ export interface PublishCarouselResult {
   mediaId: string;
 }
 
-const MOCK_MEDIA_ID = "mock-instagram-media-id";
+export const MOCK_MEDIA_ID = "mock-instagram-media-id";
 
 /**
  * Orchestrates the full carousel publish flow described at the top of this
