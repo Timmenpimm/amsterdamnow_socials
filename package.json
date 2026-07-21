@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
+    "postinstall": "prisma generate",
     "test:generate": "MOCK_AI=1 tsx --conditions=react-server scripts/test-generate.ts",
     "test:carousel-api": "MOCK_AI=1 tsx --conditions=react-server scripts/test-carousel-api.ts",
     "test:instagram": "MOCK_INSTAGRAM=1 tsx --conditions=react-server scripts/test-instagram.ts"
