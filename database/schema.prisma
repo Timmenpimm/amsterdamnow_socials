@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ArticleStatus {
+  IMPORTED
+  GENERATING
+  GENERATED
+  PUBLISHED
+  FAILED
+}
+
+enum CarouselStatus {
+  DRAFT
+  APPROVED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  passwordHash String?
+  createdAt DateTime @default(now())
+
+  connections WordPressConnection[]
+}
+
+model WordPressConnection {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  url       String
+  username  String
+  appPassword String
+  createdAt DateTime @default(now())
+
+  articles  Article[]
+}
+
+model Article {
+  id          String   @id @default(cuid())
+  connectionId String
+  connection  WordPressConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  wordpressId Int
+  title       String
+  content     String  @db.Text
+  excerpt     String?
+  imageUrl    String?
+  categories  String[]
+  tags        String[]
+  publishedAt DateTime?
+
+  status      ArticleStatus @default(IMPORTED)
+  createdAt   DateTime @default(now())
+
+  carousels   Carousel[]
+
+  @@unique([connectionId, wordpressId])
+}
+
+model Carousel {
+  id        String   @id @default(cuid())
+  articleId String
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  template  String
+  slides    Json
+  caption   String   @default("")
+  hashtags  String[]
+
+  status    CarouselStatus @default(DRAFT)
+  instagramId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
