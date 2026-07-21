@@ -11,6 +11,7 @@ export interface EditorCarousel {
   caption: string;
   hashtags: string[];
   status: CarouselStatus;
+  instagramId: string | null;
 }
 
 export interface EditorArticle {

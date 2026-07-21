@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import type { CarouselStatus } from "@prisma/client";
 import type { TemplateId } from "@/templates";
 import type { Slide } from "@/types/carousel";
 
@@ -201,6 +202,26 @@ export function useCarouselEditor(initial: EditorCarousel) {
     }
   }
 
+  /**
+   * Merges a status/instagramId update into local carousel state without a
+   * round trip through PATCH /api/carousels/:id — used by
+   * useCarouselPublish, whose own endpoints (POST /api/instagram/publish,
+   * GET /api/instagram/publish/status) return just those fields, not a full
+   * CarouselWithArticle.
+   */
+  function applyPublishUpdate(update: {
+    status: CarouselStatus;
+    instagramId?: string | null;
+  }): void {
+    setCarousel((prev) => ({
+      ...prev,
+      status: update.status,
+      ...(update.instagramId !== undefined
+        ? { instagramId: update.instagramId }
+        : {}),
+    }));
+  }
+
   async function deleteCarousel(): Promise<void> {
     setIsDeleting(true);
     try {
@@ -235,6 +256,7 @@ export function useCarouselEditor(initial: EditorCarousel) {
     switchTemplate,
     saveCaptionAndHashtags,
     setStatus,
+    applyPublishUpdate,
     deleteCarousel,
     isSwitchingTemplate,
     isSavingMeta,
