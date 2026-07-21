@@ -30,6 +30,8 @@ model User {
   createdAt DateTime @default(now())
 
   connections WordPressConnection[]
+  instagramConnection InstagramConnection?
+  brandSetting        BrandSetting?
 }
 
 model WordPressConnection {
@@ -65,6 +67,32 @@ model Article {
   carousels   Carousel[]
 
   @@unique([connectionId, wordpressId])
+}
+
+model InstagramConnection {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accessToken       String
+  businessAccountId String
+  igUsername        String?
+  createdAt         DateTime @default(now())
+}
+
+model BrandSetting {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String  @default("")
+  logoUrl         String?
+  primaryColor    String  @default("#d0342c")
+  secondaryColor  String  @default("#171715")
+  textColor       String  @default("#171715")
+  backgroundColor String  @default("#ffffff")
+  fontFamily      String  @default("Inter")
+  handle          String?
 }
 
 model Carousel {
