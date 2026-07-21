@@ -78,12 +78,16 @@ const SLIDE_LAYOUTS = [
 // Mirrors types/carousel.ts Slide, minus `imageUrl` (populated later by the
 // rendering pipeline, not by the language model) and with a business-rule
 // check that slide 0 is "hero" and the final slide is "cta".
+// NOTE: optional fields use .nullable() (not .optional()) because OpenAI's
+// strict structured-output mode requires every property to appear in the
+// JSON-schema `required` array; it accepts null but rejects missing keys.
+// Nulls are normalised back to undefined in reindexSlides().
 const slideSchema = z.object({
   index: z.number().int().min(0),
   layout: z.enum(SLIDE_LAYOUTS),
   headline: z.string().trim().min(1).max(220),
-  body: z.string().trim().max(500).optional(),
-  imagePrompt: z.string().trim().max(500).optional(),
+  body: z.string().trim().max(500).nullable(),
+  imagePrompt: z.string().trim().max(500).nullable(),
 });
 
 const carouselContentSchema = z
@@ -125,8 +129,11 @@ function toCleanArticle(article: ArticleLike) {
 /** Re-numbers slides 0..n-1 by array position, ignoring whatever index the model returned. */
 function reindexSlides(slides: z.infer<typeof slideSchema>[]): Slide[] {
   return slides.map((slide, index) => ({
-    ...slide,
     index,
+    layout: slide.layout,
+    headline: slide.headline,
+    ...(slide.body != null ? { body: slide.body } : {}),
+    ...(slide.imagePrompt != null ? { imagePrompt: slide.imagePrompt } : {}),
   }));
 }
 
@@ -205,8 +212,9 @@ export interface RegenerateSlideOptions {
 // deterministically by regenerateSlide() itself, not left to the model.
 const slideContentSchema = z.object({
   headline: z.string().trim().min(1).max(220),
-  body: z.string().trim().max(500).optional(),
-  imagePrompt: z.string().trim().max(500).optional(),
+  // .nullable() (not .optional()) for OpenAI strict structured output — see slideSchema note.
+  body: z.string().trim().max(500).nullable(),
+  imagePrompt: z.string().trim().max(500).nullable(),
 });
 
 /**
@@ -289,5 +297,11 @@ export async function regenerateSlide(
     throw new InvalidSlideOutputError(error);
   }
 
-  return { index: slideIndex, layout, ...object };
+  return {
+    index: slideIndex,
+    layout,
+    headline: object.headline,
+    ...(object.body != null ? { body: object.body } : {}),
+    ...(object.imagePrompt != null ? { imagePrompt: object.imagePrompt } : {}),
+  };
 }
