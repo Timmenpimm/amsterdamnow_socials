@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InstagramOAuthConnect } from "@/components/dashboard/instagram-oauth-connect";
 
 interface SavedConnection {
   businessAccountId: string;
@@ -155,16 +156,31 @@ export function InstagramConnectionForm() {
         </CardDescription>
       </CardHeader>
 
+      <CardContent className="border-b border-border pb-6">
+        <Suspense fallback={null}>
+          <InstagramOAuthConnect
+            saved={saved ? { igUsername: saved.igUsername } : null}
+            loading={loading}
+          />
+        </Suspense>
+      </CardContent>
+
+      <CardContent className="pb-0 pt-6">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Handmatig koppelen (geavanceerd)
+        </p>
+      </CardContent>
+
       {loading ? (
         <CardContent className="text-sm text-muted-foreground">Laden…</CardContent>
       ) : editing ? (
         <form onSubmit={handleSubmit}>
           <CardContent className="flex flex-col gap-4">
             <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+              Gebruik dit alleen als de Instagram-login hierboven niet werkt.
               Haal je toegangstoken en business account-ID op via Meta Business
               Suite → Instellingen → Bedrijfsinstellingen → Systeemgebruikers
-              (of de Graph API Explorer). OAuth-login volgt in een latere
-              versie — voorlopig voer je deze waarden handmatig in.
+              (of de Graph API Explorer).
             </p>
 
             <div className="flex flex-col gap-2">
