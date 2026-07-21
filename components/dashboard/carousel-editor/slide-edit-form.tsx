@@ -12,6 +12,8 @@ interface SlideEditFormProps {
   slide: Slide;
   isSaving: boolean;
   isRegenerating: boolean;
+  /** True once the carousel is PUBLISHING/PUBLISHED — a published carousel is never edited again. */
+  readOnly?: boolean;
   onSave: (
     patch: Pick<Slide, "headline" | "body" | "imagePrompt">
   ) => Promise<boolean>;
@@ -28,6 +30,7 @@ export function SlideEditForm({
   slide,
   isSaving,
   isRegenerating,
+  readOnly = false,
   onSave,
   onRegenerate,
 }: SlideEditFormProps) {
@@ -48,7 +51,7 @@ export function SlideEditForm({
     setImagePrompt(slide.imagePrompt ?? "");
   }
 
-  const busy = isSaving || isRegenerating;
+  const busy = isSaving || isRegenerating || readOnly;
 
   return (
     <div className="flex flex-col gap-4">
@@ -85,25 +88,27 @@ export function SlideEditForm({
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          onClick={() =>
-            onSave({
-              headline,
-              body: body.trim() || undefined,
-              imagePrompt: imagePrompt.trim() || undefined,
-            })
-          }
-          disabled={busy || headline.trim().length === 0}
-        >
-          {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
-          Opslaan
-        </Button>
-        <Button variant="outline" onClick={onRegenerate} disabled={busy}>
-          {isRegenerating ? <Loader2 className="animate-spin" /> : <Sparkles />}
-          Regenereer met AI
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() =>
+              onSave({
+                headline,
+                body: body.trim() || undefined,
+                imagePrompt: imagePrompt.trim() || undefined,
+              })
+            }
+            disabled={busy || headline.trim().length === 0}
+          >
+            {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
+            Opslaan
+          </Button>
+          <Button variant="outline" onClick={onRegenerate} disabled={busy}>
+            {isRegenerating ? <Loader2 className="animate-spin" /> : <Sparkles />}
+            Regenereer met AI
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

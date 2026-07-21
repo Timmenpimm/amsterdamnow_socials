@@ -43,6 +43,34 @@ export async function getInstagramConnection(
   return connection ? toSafeInstagramConnection(connection) : null;
 }
 
+/**
+ * Internal shape carrying the *decrypted* access token — never send this to
+ * the client (use InstagramConnectionSafe / getInstagramConnection for
+ * that). Only for server-side callers that need to actually call the Meta
+ * Graph API, e.g. lib/instagram-publish.ts.
+ */
+export interface InstagramConnectionCredentials {
+  accessToken: string;
+  businessAccountId: string;
+  igUsername: string | null;
+}
+
+export async function getInstagramConnectionCredentials(
+  userId: string
+): Promise<InstagramConnectionCredentials | null> {
+  const connection = await db.instagramConnection.findUnique({
+    where: { userId },
+  });
+
+  if (!connection) return null;
+
+  return {
+    accessToken: decrypt(connection.accessToken),
+    businessAccountId: connection.businessAccountId,
+    igUsername: connection.igUsername,
+  };
+}
+
 function toSafeInstagramConnection(connection: {
   id: string;
   businessAccountId: string;

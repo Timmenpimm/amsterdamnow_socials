@@ -13,20 +13,28 @@ import { SlideEditForm } from "./slide-edit-form";
 import { SlidePreview } from "./slide-preview";
 import { SlideStrip } from "./slide-strip";
 import { useCarouselEditor } from "./use-carousel-editor";
+import { useCarouselPublish } from "./use-carousel-publish";
 import type { EditorArticle, EditorCarousel } from "./types";
 
 interface CarouselEditorProps {
   initial: EditorCarousel;
   article: EditorArticle;
+  /** The connected Instagram account's @handle, if any — for the "view on Instagram" fallback link. */
+  instagramUsername: string | null;
 }
 
 /**
- * Orchestrates the Phase 5 preview editor: wires useCarouselEditor's state
- * and mutations into the small presentational pieces in this folder. Mounts
- * the single <Toaster/> for this route — leaf components just call
- * sonner's toast() directly.
+ * Orchestrates the carousel editor: wires useCarouselEditor's (Phase 5)
+ * and useCarouselPublish's (Phase 6) state and mutations into the small
+ * presentational pieces in this folder, and locks editing once the
+ * carousel is PUBLISHING/PUBLISHED. Mounts the single <Toaster/> for this
+ * route — leaf components just call sonner's toast() directly.
  */
-export function CarouselEditor({ initial, article }: CarouselEditorProps) {
+export function CarouselEditor({
+  initial,
+  article,
+  instagramUsername,
+}: CarouselEditorProps) {
   const {
     carousel,
     selectedIndex,
@@ -38,6 +46,7 @@ export function CarouselEditor({ initial, article }: CarouselEditorProps) {
     switchTemplate,
     saveCaptionAndHashtags,
     setStatus,
+    applyPublishUpdate,
     deleteCarousel,
     isSwitchingTemplate,
     isSavingMeta,
@@ -47,9 +56,18 @@ export function CarouselEditor({ initial, article }: CarouselEditorProps) {
     isDeleting,
   } = useCarouselEditor(initial);
 
+  const { publish, isPublishing, permalink } = useCarouselPublish(
+    carousel.id,
+    initial.status,
+    applyPublishUpdate
+  );
+
   const selectedSlide =
     carousel.slides.find((slide) => slide.index === selectedIndex) ??
     carousel.slides[0];
+
+  // A published (or currently publishing) carousel is never edited again.
+  const readOnly = carousel.status === "PUBLISHING" || carousel.status === "PUBLISHED";
 
   return (
     <div className="flex flex-1 flex-col gap-6 px-6 py-8 sm:px-8">
@@ -78,7 +96,7 @@ export function CarouselEditor({ initial, article }: CarouselEditorProps) {
           <TemplateSelect
             value={carousel.template}
             onSelect={switchTemplate}
-            disabled={isSwitchingTemplate}
+            disabled={isSwitchingTemplate || readOnly}
           />
         </div>
       </div>
@@ -101,6 +119,7 @@ export function CarouselEditor({ initial, article }: CarouselEditorProps) {
             slide={selectedSlide}
             isSaving={isSavingSlide}
             isRegenerating={isRegeneratingSlide}
+            readOnly={readOnly}
             onSave={(patch) => saveSlideContent(selectedSlide.index, patch)}
             onRegenerate={() => regenerateSlideWithAi(selectedSlide.index)}
           />
@@ -111,15 +130,20 @@ export function CarouselEditor({ initial, article }: CarouselEditorProps) {
         caption={carousel.caption}
         hashtags={carousel.hashtags}
         isSaving={isSavingMeta}
+        readOnly={readOnly}
         onSave={saveCaptionAndHashtags}
       />
 
       <CarouselActions
         status={carousel.status}
+        instagramUsername={instagramUsername}
+        permalink={permalink}
         isUpdatingStatus={isUpdatingStatus}
         isDeleting={isDeleting}
+        isPublishing={isPublishing}
         onSetStatus={setStatus}
         onDelete={deleteCarousel}
+        onPublish={() => publish(carousel.status)}
       />
     </div>
   );
