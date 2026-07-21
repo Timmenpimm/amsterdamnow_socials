@@ -5,11 +5,18 @@
   "tsx": true,
   "cssVariables": true,
   "tailwind": {
-    "config": "tailwind.config.ts",
-    "css": "app/globals.css"
+    "config": "",
+    "css": "app/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
   },
   "aliases": {
-    "@/components": "./components",
-    "@/lib/utils": "./lib/utils"
-  }
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  },
+  "iconLibrary": "lucide"
 }
