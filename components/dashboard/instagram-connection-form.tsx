@@ -16,25 +16,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 interface SavedConnection {
-  url: string;
-  username: string;
-  appPasswordMasked: string;
+  businessAccountId: string;
+  igUsername: string | null;
+  accessTokenMasked: string;
 }
 
 interface TestResult {
   ok: boolean;
-  siteName?: string;
+  username?: string;
   error?: string;
 }
 
-export function WordPressConnectionForm() {
+export function InstagramConnectionForm() {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState<SavedConnection | null>(null);
   const [editing, setEditing] = useState(false);
 
-  const [url, setUrl] = useState("");
-  const [username, setUsername] = useState("");
-  const [appPassword, setAppPassword] = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  const [businessAccountId, setBusinessAccountId] = useState("");
+  const [igUsername, setIgUsername] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -47,14 +47,14 @@ export function WordPressConnectionForm() {
 
     async function load() {
       try {
-        const response = await fetch("/api/settings/wordpress");
+        const response = await fetch("/api/settings/instagram");
         const data = await response.json();
         if (cancelled) return;
 
         if (response.ok && data.connection) {
           setSaved(data.connection);
-          setUrl(data.connection.url);
-          setUsername(data.connection.username);
+          setBusinessAccountId(data.connection.businessAccountId);
+          setIgUsername(data.connection.igUsername ?? "");
         } else {
           setEditing(true);
         }
@@ -78,10 +78,14 @@ export function WordPressConnectionForm() {
     setTestResult(null);
 
     try {
-      const response = await fetch("/api/settings/wordpress", {
+      const response = await fetch("/api/settings/instagram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, username, appPassword }),
+        body: JSON.stringify({
+          accessToken,
+          businessAccountId,
+          igUsername: igUsername || undefined,
+        }),
       });
       const data = await response.json();
 
@@ -91,7 +95,7 @@ export function WordPressConnectionForm() {
       }
 
       setSaved(data.connection);
-      setAppPassword("");
+      setAccessToken("");
       setEditing(false);
     } catch {
       setSaveError("Something went wrong. Please try again.");
@@ -105,12 +109,15 @@ export function WordPressConnectionForm() {
     setTestResult(null);
 
     try {
-      const response = await fetch("/api/settings/wordpress/test", {
+      const response = await fetch("/api/settings/instagram/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           editing
-            ? { url, username: username || undefined, appPassword: appPassword || undefined }
+            ? {
+                accessToken: accessToken || undefined,
+                businessAccountId: businessAccountId || undefined,
+              }
             : {}
         ),
       });
@@ -124,16 +131,16 @@ export function WordPressConnectionForm() {
   }
 
   function handleReplace() {
-    setAppPassword("");
+    setAccessToken("");
     setTestResult(null);
     setEditing(true);
   }
 
   function handleCancel() {
     if (!saved) return;
-    setUrl(saved.url);
-    setUsername(saved.username);
-    setAppPassword("");
+    setBusinessAccountId(saved.businessAccountId);
+    setIgUsername(saved.igUsername ?? "");
+    setAccessToken("");
     setSaveError(null);
     setTestResult(null);
     setEditing(false);
@@ -142,9 +149,9 @@ export function WordPressConnectionForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>WordPress-verbinding</CardTitle>
+        <CardTitle>Instagram-verbinding</CardTitle>
         <CardDescription>
-          Koppel een WordPress-website om artikelen te kunnen importeren.
+          Koppel een Instagram-bedrijfsaccount om carousels te publiceren.
         </CardDescription>
       </CardHeader>
 
@@ -153,40 +160,44 @@ export function WordPressConnectionForm() {
       ) : editing ? (
         <form onSubmit={handleSubmit}>
           <CardContent className="flex flex-col gap-4">
+            <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+              Haal je toegangstoken en business account-ID op via Meta Business
+              Suite → Instellingen → Bedrijfsinstellingen → Systeemgebruikers
+              (of de Graph API Explorer). OAuth-login volgt in een latere
+              versie — voorlopig voer je deze waarden handmatig in.
+            </p>
+
             <div className="flex flex-col gap-2">
-              <Label htmlFor="wp-url">Website-URL</Label>
+              <Label htmlFor="ig-token">Toegangstoken</Label>
               <Input
-                id="wp-url"
-                name="url"
-                type="url"
-                placeholder="https://voorbeeld.nl"
-                required
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="wp-username">Gebruikersnaam</Label>
-              <Input
-                id="wp-username"
-                name="username"
-                type="text"
-                autoComplete="username"
-                required
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="wp-app-password">Applicatiewachtwoord</Label>
-              <Input
-                id="wp-app-password"
-                name="appPassword"
+                id="ig-token"
+                name="accessToken"
                 type="password"
                 autoComplete="off"
                 required
-                value={appPassword}
-                onChange={(event) => setAppPassword(event.target.value)}
+                value={accessToken}
+                onChange={(event) => setAccessToken(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="ig-business-id">Business account-ID</Label>
+              <Input
+                id="ig-business-id"
+                name="businessAccountId"
+                type="text"
+                required
+                value={businessAccountId}
+                onChange={(event) => setBusinessAccountId(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="ig-username">Instagram-gebruikersnaam (optioneel)</Label>
+              <Input
+                id="ig-username"
+                name="igUsername"
+                type="text"
+                value={igUsername}
+                onChange={(event) => setIgUsername(event.target.value)}
               />
             </div>
 
@@ -205,7 +216,7 @@ export function WordPressConnectionForm() {
             <Button
               type="button"
               variant="outline"
-              disabled={testing || !url}
+              disabled={testing || !businessAccountId}
               onClick={handleTest}
             >
               {testing && <Loader2 className="animate-spin" />}
@@ -222,12 +233,12 @@ export function WordPressConnectionForm() {
         <>
           <CardContent className="flex flex-col gap-3">
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              <dt className="text-muted-foreground">Website</dt>
-              <dd className="truncate">{saved?.url}</dd>
+              <dt className="text-muted-foreground">Business account-ID</dt>
+              <dd className="truncate">{saved?.businessAccountId}</dd>
               <dt className="text-muted-foreground">Gebruikersnaam</dt>
-              <dd className="truncate">{saved?.username}</dd>
-              <dt className="text-muted-foreground">Wachtwoord</dt>
-              <dd className="font-mono">{saved?.appPasswordMasked}</dd>
+              <dd className="truncate">{saved?.igUsername ?? "—"}</dd>
+              <dt className="text-muted-foreground">Toegangstoken</dt>
+              <dd className="font-mono">{saved?.accessTokenMasked}</dd>
             </dl>
             <TestResultBadge result={testResult} />
           </CardContent>
@@ -258,7 +269,7 @@ function TestResultBadge({ result }: { result: TestResult | null }) {
     return (
       <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
         <CheckCircle2 className="size-4 shrink-0" />
-        Verbinding gelukt{result.siteName ? ` — ${result.siteName}` : ""}
+        Verbinding gelukt{result.username ? ` — @${result.username}` : ""}
       </p>
     );
   }
