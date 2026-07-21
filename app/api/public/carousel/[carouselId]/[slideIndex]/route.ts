@@ -115,10 +115,17 @@ export async function GET(request: Request, { params }: RouteParams) {
     // formats) for feed media — resvg only produces PNG, so re-encode.
     const jpeg = await sharp(png).jpeg({ quality: JPEG_QUALITY }).toBuffer();
 
-    return new NextResponse(jpeg, {
+    // Return a plain Uint8Array, NOT the Node Buffer: on the Vercel serverless
+    // runtime, passing a Buffer to NextResponse gets coerced to a UTF-8 string,
+    // which mangles every byte > 0x7F (each becomes U+FFFD) and produces a
+    // corrupt JPEG that Instagram rejects. A Uint8Array is sent as raw bytes.
+    const body = new Uint8Array(jpeg);
+
+    return new NextResponse(body, {
       status: 200,
       headers: {
         "Content-Type": "image/jpeg",
+        "Content-Length": String(body.byteLength),
         "Cache-Control": CACHE_CONTROL,
       },
     });
