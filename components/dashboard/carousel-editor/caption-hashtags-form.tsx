@@ -21,6 +21,8 @@ interface CaptionHashtagsFormProps {
   caption: string;
   hashtags: string[];
   isSaving: boolean;
+  /** True once the carousel is PUBLISHING/PUBLISHED — a published carousel is never edited again. */
+  readOnly?: boolean;
   onSave: (caption: string, hashtags: string[]) => Promise<boolean>;
 }
 
@@ -41,6 +43,7 @@ export function CaptionHashtagsForm({
   caption,
   hashtags,
   isSaving,
+  readOnly = false,
   onSave,
 }: CaptionHashtagsFormProps) {
   const [captionValue, setCaptionValue] = useState(caption);
@@ -75,7 +78,7 @@ export function CaptionHashtagsForm({
             id="carousel-caption"
             value={captionValue}
             onChange={(event) => setCaptionValue(event.target.value)}
-            disabled={isSaving}
+            disabled={isSaving || readOnly}
             rows={5}
           />
         </div>
@@ -86,7 +89,7 @@ export function CaptionHashtagsForm({
             id="carousel-hashtags"
             value={hashtagsValue}
             onChange={(event) => setHashtagsValue(event.target.value)}
-            disabled={isSaving}
+            disabled={isSaving || readOnly}
             placeholder="amsterdam, uitgaan, cultuur"
           />
           {previewTags.length > 0 && (
@@ -100,15 +103,17 @@ export function CaptionHashtagsForm({
           )}
         </div>
       </CardContent>
-      <CardFooter>
-        <Button
-          onClick={() => onSave(captionValue.trim(), parseHashtags(hashtagsValue))}
-          disabled={isSaving || captionValue.trim().length === 0}
-        >
-          {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
-          Opslaan
-        </Button>
-      </CardFooter>
+      {!readOnly && (
+        <CardFooter>
+          <Button
+            onClick={() => onSave(captionValue.trim(), parseHashtags(hashtagsValue))}
+            disabled={isSaving || captionValue.trim().length === 0}
+          >
+            {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
+            Opslaan
+          </Button>
+        </CardFooter>
+      )}
     </Card>
   );
 }
