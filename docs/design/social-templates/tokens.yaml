@@ -1,0 +1,81 @@
+# Design handoff uit Claude Design, aangeleverd door Martijn. Verbatim gekopieerd — canonieke bron, niet herschrijven.
+#
+# Amsterdam NOW design tokens
+# Voor gebruik in social media automatisering en design prompts
+# Geëxtraheerd uit website_design.json (homepage), validated tegen article en list
+# WordPress preset kleuren zijn bewust weggelaten, alleen de daadwerkelijk gebruikte
+# merkkleuren staan hieronder.
+
+brand:
+  name: "Amsterdam NOW"
+  voice: "zoals een Amsterdammer een vriend tipt, concreet en specifiek, nooit folder-taal"
+  url: "amsterdamnow.com"
+
+typography:
+  display:
+    family: "Aktiv Grotesk Condensed"
+    weight: 700
+    use_for: "headings, slide-hooks, grote nummers, statement-tekst"
+    letter_spacing: "0.16px tot 1px"
+  body_primary:
+    family: "Oswald"
+    weight: 300  # Light
+    use_for: "body tekst, korte beschrijvingen onder headings"
+  body_secondary:
+    family: "Aktiv Grotesk Condensed"
+    weight: 200  # ExtraLight
+    use_for: "alternatieve body, bijschriften"
+  accent:
+    family: "Oswald"
+    weight: 400  # Regular
+    use_for: "wijknamen, datums, secundaire info"
+
+colors:
+  text_primary: "#000000"
+  text_secondary: "#666666"
+  text_tertiary: "#313131"
+  background_primary: "#FFFFFF"
+  background_subtle: "#F4F5F6"
+  accent: "#E90000"        # Spaarzaam: categorie-labels, datums, CTA's
+  accent_dark: "#222222"   # Voor dark mode situaties
+  overlay_dark: "rgba(0,0,0,0.5)"  # Gradient over foto's voor witte tekst
+
+  forbidden:
+    - "#2271b1"  # WordPress blauw, niet gebruiken
+    - "#0693e3"  # WordPress preset, niet gebruiken
+    - "alle gradients"
+    - "alle pastelkleuren"
+
+layout:
+  border_radius_max_px: 5
+  border_radius_preferred: "0 of 3px, scherpe hoeken"
+  shadows: "geen of zeer subtiel (rgba(0,0,0,0.1) 1px)"
+  grid: "ruim, magazine-stijl, foto-driven"
+  spacing_unit_px: 8  # Veelvouden van 8 gebruiken: 8, 16, 24, 40
+
+logo:
+  position_carousel: "rechtsonder"
+  position_story: "rechtsonder of midden-onder"
+  size_carousel_height_px: 40
+  color_on_light: "zwart"
+  color_on_dark: "wit"
+
+photography:
+  style: "documentair, ongerepeteerd, daglicht waar mogelijk"
+  forbidden: "vignettes, instagram filters, oververzadiging, AI-gegenereerd"
+
+constraints:
+  forbidden_elements:
+    - "emoji in het design (in copy mag spaarzaam)"
+    - "uitroeptekens in overlays"
+    - "drop shadows op tekst"
+    - "swipe-pijltjes en page tellers (1/8)"
+    - "stockfoto-look"
+    - "neon kleuren"
+    - "lensflare en glow effecten"
+  forbidden_phrases_in_overlays:
+    - "ontdek nu"
+    - "verborgen parel"
+    - "must-see"
+    - "bekijk hier"
+    - "klik hier"
