@@ -9,14 +9,15 @@ import {
   MissingOpenAiKeyError,
   generateCarousel,
 } from "@/lib/openai";
+import { TEMPLATE_IDS } from "@/templates";
 
 export const runtime = "nodejs";
 
-const DEFAULT_TEMPLATE = "default";
+const DEFAULT_TEMPLATE = TEMPLATE_IDS[0];
 
 const generateRequestSchema = z.object({
   articleId: z.string().trim().min(1, "articleId is required"),
-  template: z.string().trim().min(1).max(100).optional(),
+  template: z.enum(TEMPLATE_IDS).optional(),
 });
 
 /**

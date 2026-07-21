@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { GenerateCarouselButton } from "@/components/dashboard/generate-carousel-button";
 import type { ArticleStatus } from "@prisma/client";
 
 export interface ArticleRow {
@@ -58,7 +59,8 @@ export function PostsArticlesTable({ articles }: { articles: ArticleRow[] }) {
             <TableHead>Titel</TableHead>
             <TableHead>Categorieën</TableHead>
             <TableHead>Datum</TableHead>
-            <TableHead className="text-right">Status</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Actie</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -94,10 +96,13 @@ export function PostsArticlesTable({ articles }: { articles: ArticleRow[] }) {
               <TableCell className="text-muted-foreground">
                 {formatDate(article.publishedAt)}
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell>
                 <Badge variant={STATUS_VARIANT[article.status]}>
                   {STATUS_LABEL[article.status]}
                 </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <GenerateCarouselButton articleId={article.id} />
               </TableCell>
             </TableRow>
           ))}

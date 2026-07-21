@@ -7,8 +7,12 @@ import { z } from "zod";
 import {
   buildCarouselSystemPrompt,
   buildCarouselUserPrompt,
+  buildSlideRegenerationSystemPrompt,
+  buildSlideRegenerationUserPrompt,
   stripHtml,
+  type SlideSummary,
 } from "@/lib/carousel-prompt";
+import { buildMockCarouselContent } from "@/lib/openai-mock";
 import type { CarouselContent, Slide, SlideLayout } from "@/types/carousel";
 import type { WordPressPost } from "@/types/wordpress";
 
@@ -41,6 +45,23 @@ export class InvalidCarouselOutputError extends Error {
   constructor(cause?: unknown) {
     super("AI response did not match the expected carousel structure.");
     this.name = "InvalidCarouselOutputError";
+    this.cause = cause;
+  }
+}
+
+/** Thrown when regenerateSlide() is asked for an index the carousel doesn't have. */
+export class SlideNotFoundError extends Error {
+  constructor(slideIndex: number) {
+    super(`No slide with index ${slideIndex} on this carousel.`);
+    this.name = "SlideNotFoundError";
+  }
+}
+
+/** Thrown when the model's single-slide output fails validation. */
+export class InvalidSlideOutputError extends Error {
+  constructor(cause?: unknown) {
+    super("AI response did not match the expected slide structure.");
+    this.name = "InvalidSlideOutputError";
     this.cause = cause;
   }
 }
@@ -167,57 +188,106 @@ export async function generateCarousel(
   return { ...object, slides: reindexSlides(object.slides) };
 }
 
-function buildMockCarouselContent(
-  title: string,
-  slideCount: number
-): z.infer<typeof carouselContentSchema> {
-  const count = Math.max(2, slideCount);
-  const middleLayouts: SlideLayout[] = ["text", "list", "quote", "image"];
+/** Minimal carousel shape regenerateSlide() needs — title plus the current slide sequence. */
+export interface CarouselLike {
+  title: string;
+  slides: Slide[];
+}
 
-  const slides: z.infer<typeof slideSchema>[] = Array.from(
-    { length: count },
-    (_, i) => {
-      if (i === 0) {
-        return {
-          index: 0,
-          layout: "hero" as const,
-          headline: `[MOCK] ${title || "Sample article"}`,
-          body: "Mock hero body copy for smoke-testing without an API key.",
-          imagePrompt: "Mock hero image prompt.",
-        };
-      }
-      if (i === count - 1) {
-        return {
-          index: i,
-          layout: "cta" as const,
-          headline: "[MOCK] Read the full story",
-          body: "Mock call-to-action body copy.",
-          imagePrompt: "Mock cta image prompt.",
-        };
-      }
-      return {
-        index: i,
-        layout: middleLayouts[(i - 1) % middleLayouts.length],
-        headline: `[MOCK] Slide ${i} headline`,
-        body: `Mock body copy for slide ${i}.`,
-        imagePrompt: `Mock image prompt for slide ${i}.`,
-      };
-    }
-  );
+export interface RegenerateSlideOptions {
+  language?: string;
+  tone?: string;
+  /** Layout override for a middle slide only — first/last stay hero/cta. */
+  layout?: SlideLayout;
+}
 
-  return {
-    title: `[MOCK] ${title || "Sample article"}`,
-    slides,
-    caption: "[MOCK] Sample caption with hook, context and a call to action.",
-    hashtags: [
-      "mock",
-      "smoketest",
-      "amsterdamnow",
-      "sample",
-      "carousel",
-      "editorial",
-      "contenttest",
-      "dryrun",
-    ],
+// Only the model-generated part of a slide — layout and index are decided
+// deterministically by regenerateSlide() itself, not left to the model.
+const slideContentSchema = z.object({
+  headline: z.string().trim().min(1).max(220),
+  body: z.string().trim().max(500).optional(),
+  imagePrompt: z.string().trim().max(500).optional(),
+});
+
+/**
+ * Regenerates a single slide of an existing carousel via generateObject,
+ * giving the model the article plus the other slides as context so the
+ * replacement fits the rest of the sequence. Layout is kept as-is (or
+ * overridden via opts.layout) except for the first/last slide, which stay
+ * "hero"/"cta". Throws SlideNotFoundError, MissingOpenAiKeyError, or
+ * InvalidSlideOutputError (see class docs above).
+ */
+export async function regenerateSlide(
+  article: ArticleLike,
+  carousel: CarouselLike,
+  slideIndex: number,
+  opts: RegenerateSlideOptions = {}
+): Promise<Slide> {
+  const targetSlide = carousel.slides.find((s) => s.index === slideIndex);
+  if (!targetSlide) {
+    throw new SlideNotFoundError(slideIndex);
+  }
+
+  const indices = carousel.slides.map((s) => s.index);
+  const minIndex = Math.min(...indices);
+  const maxIndex = Math.max(...indices);
+  const layout: SlideLayout =
+    slideIndex === minIndex
+      ? "hero"
+      : slideIndex === maxIndex
+        ? "cta"
+        : (opts.layout ?? targetSlide.layout);
+
+  const promptOptions = {
+    slideCount: carousel.slides.length,
+    language: opts.language ?? DEFAULT_LANGUAGE,
+    tone: opts.tone ?? DEFAULT_TONE,
   };
+  const cleanArticle = toCleanArticle(article);
+  const otherSlides: SlideSummary[] = carousel.slides.map((s) => ({
+    index: s.index,
+    layout: s.layout,
+    headline: s.headline,
+    body: s.body,
+  }));
+
+  // --- MOCK PATH (test/dev only) — mirrors generateCarousel()'s MOCK_AI path. ---
+  if (process.env.MOCK_AI === "1") {
+    return {
+      index: slideIndex,
+      layout,
+      headline: `[MOCK] Regenerated slide ${slideIndex}`,
+      body: `Mock regenerated body copy for slide ${slideIndex}.`,
+      imagePrompt: `Mock regenerated image prompt for slide ${slideIndex}.`,
+    };
+  }
+  // --- END MOCK PATH ---
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new MissingOpenAiKeyError();
+  }
+
+  const openai = createOpenAI({ apiKey });
+  const model = openai(process.env.OPENAI_MODEL || DEFAULT_MODEL);
+
+  let object: z.infer<typeof slideContentSchema>;
+  try {
+    const result = await generateObject({
+      model,
+      schema: slideContentSchema,
+      system: buildSlideRegenerationSystemPrompt(promptOptions, layout),
+      prompt: buildSlideRegenerationUserPrompt(
+        cleanArticle,
+        otherSlides,
+        slideIndex,
+        layout
+      ),
+    });
+    object = result.object;
+  } catch (error) {
+    throw new InvalidSlideOutputError(error);
+  }
+
+  return { index: slideIndex, layout, ...object };
 }

@@ -97,3 +97,73 @@ Excerpt: ${article.excerpt || "(none provided)"}
 Content:
 ${article.content}`;
 }
+
+/** Minimal shape of a slide's content needed to describe it back to the model as context. */
+export interface SlideSummary {
+  index: number;
+  layout: string;
+  headline: string;
+  body?: string;
+}
+
+/**
+ * System prompt for regenerating a single slide. Same editorial voice/rules
+ * as buildCarouselSystemPrompt, but scoped to one slide whose layout is
+ * fixed by the caller (regenerating never changes a slide's role in the
+ * sequence — see lib/openai.ts::regenerateSlide).
+ */
+export function buildSlideRegenerationSystemPrompt(
+  opts: CarouselPromptOptions,
+  layout: string
+): string {
+  const languageName = LANGUAGE_NAMES[opts.language] ?? opts.language;
+
+  return `You are a senior social media editor at a professional online publication, rewriting a single slide of an existing Instagram carousel. Match the editorial voice of the rest of the carousel — never generic marketing copy.
+
+Tone: ${opts.tone} — professional, editorial, specific to the article. No hype words ("amazing", "must-see", "you won't believe"), no filler, no generic influencer voice.
+
+Write everything in ${languageName}.
+
+This slide must use layout "${layout}" — do not change its role in the sequence, only regenerate its headline/body/imagePrompt content.
+
+Rules:
+- Headline: maximum ~20 words. Punchy, concrete, no clickbait, no title-case marketing headlines.
+- Body: maximum ~50 words. Written like a magazine caption — informative, specific to the article's content, never vague.
+- imagePrompt: a short (1-2 sentence) visual art-direction note describing what photo or illustration would accompany this slide. Describe subject, mood and framing, not brand elements.
+- Keep the new slide consistent with the other slides of the carousel (avoid repeating their headlines or angles) so the whole sequence still reads as one coherent story.
+
+Return only the structured data — no extra commentary.`;
+}
+
+/**
+ * User prompt for regenerating a single slide: gives the model the article
+ * plus the full existing slide sequence (so the replacement slide fits the
+ * story instead of contradicting or repeating a neighbor).
+ */
+export function buildSlideRegenerationUserPrompt(
+  article: CleanArticle,
+  otherSlides: SlideSummary[],
+  slideIndex: number,
+  layout: string
+): string {
+  const sequence = otherSlides
+    .map((slide) => {
+      const marker = slide.index === slideIndex ? " <- regenerate this one" : "";
+      return `${slide.index}. [${slide.layout}] ${slide.headline}${
+        slide.body ? ` — ${slide.body}` : ""
+      }${marker}`;
+    })
+    .join("\n");
+
+  return `Regenerate slide ${slideIndex} (layout "${layout}") of the Instagram carousel below, based on the following article. Keep it consistent with the other slides shown.
+
+Article title: ${article.title}
+
+Excerpt: ${article.excerpt || "(none provided)"}
+
+Content:
+${article.content}
+
+Current carousel sequence:
+${sequence}`;
+}
