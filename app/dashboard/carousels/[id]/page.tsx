@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { CarouselEditor } from "@/components/dashboard/carousel-editor/carousel-editor";
 import { slidesSchema } from "@/lib/carousel-schema";
 import { CarouselNotFoundError, getCarouselForUser } from "@/lib/carousels";
+import { getInstagramConnection } from "@/lib/connections/instagram";
 import { isTemplateId, TEMPLATE_IDS } from "@/templates";
 
 interface CarouselEditorPageProps {
@@ -52,6 +53,10 @@ export default async function CarouselEditorPage({
     ? carousel.template
     : TEMPLATE_IDS[0];
 
+  // Only needed for the "view on Instagram" fallback link (settings page
+  // already reads/renders this connection in full) — null if not connected.
+  const instagramConnection = await getInstagramConnection(userId);
+
   return (
     <CarouselEditor
       initial={{
@@ -61,12 +66,14 @@ export default async function CarouselEditorPage({
         caption: carousel.caption,
         hashtags: carousel.hashtags,
         status: carousel.status,
+        instagramId: carousel.instagramId,
       }}
       article={{
         id: carousel.article.id,
         title: carousel.article.title,
         imageUrl: carousel.article.imageUrl,
       }}
+      instagramUsername={instagramConnection?.igUsername ?? null}
     />
   );
 }
