@@ -41,15 +41,20 @@ export class CarouselDeleteNotAllowedError extends Error {
 /**
  * Allowed CarouselStatus transitions reachable through this CRUD API.
  * PUBLISHING and PUBLISHED are deliberately absent as *targets* here — they
- * are only ever set by the (future, Phase 6) publish pipeline, never by a
- * plain PATCH from the editor.
+ * are only ever set by the Phase 6 publish pipeline (lib/instagram-publish.ts),
+ * never by a plain PATCH from the editor.
+ *
+ * FAILED -> APPROVED is the one exception: it's how the editor's "opnieuw
+ * proberen" affordance (and lib/instagram-publish.ts's own error-path
+ * revert) gets a carousel that failed to publish back into a publishable
+ * state, without resurrecting it all the way to DRAFT.
  */
 const STATUS_TRANSITIONS: Record<CarouselStatus, CarouselStatus[]> = {
   DRAFT: ["APPROVED"],
   APPROVED: ["DRAFT"],
   PUBLISHING: [],
   PUBLISHED: [],
-  FAILED: [],
+  FAILED: ["APPROVED"],
 };
 
 /** Pure helper (no I/O) so it can be unit-tested without a database. */
