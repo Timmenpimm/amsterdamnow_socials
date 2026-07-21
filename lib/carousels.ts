@@ -80,8 +80,14 @@ export function canMutateCarouselContent(status: CarouselStatus): boolean {
   return !isLockedForEditing(status);
 }
 
-/** Shared include: pulls in just enough of Article for a title/preview. */
-const withArticleTitle = {
+/**
+ * Shared include: pulls in just enough of Article for a title/preview.
+ * Exported so other modules that update a Carousel row directly (e.g.
+ * lib/instagram-publish.ts's PUBLISHING/PUBLISHED/FAILED transitions,
+ * which bypass updateCarouselForUser() below) can return the exact same
+ * CarouselWithArticle shape instead of re-declaring this include.
+ */
+export const withArticleTitle = {
   article: { select: { id: true, title: true, imageUrl: true } },
 } satisfies Prisma.CarouselInclude;
 
