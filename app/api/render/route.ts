@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/auth";
+import { getBrandSettings } from "@/lib/connections/brand";
 import { db } from "@/lib/db";
 import { renderCarousel, renderSlide } from "@/lib/renderer";
 import { isTemplateId } from "@/templates";
@@ -14,12 +15,10 @@ import { renderRequestSchema, slidesSchema } from "./schema";
 export const runtime = "nodejs";
 
 /**
- * TODO (Phase 6+): there is no persisted Brand model yet — the dashboard's
- * "Merkinstellingen" section (components/dashboard/brand-settings-section.tsx)
- * is still a placeholder. Until brand settings are stored per-user/per-
- * connection, every render uses this fixed default (black/white + the
- * project's accent red). Swap this out for a real lookup once that model
- * exists; the renderer and templates already accept any BrandSettings.
+ * Fallback used when the user hasn't configured brand settings yet
+ * (components/dashboard/brand-settings-section.tsx / getBrandSettings()
+ * returns null for a first-time user). Real per-user brand settings are
+ * now looked up via lib/connections/brand.ts below.
  */
 const DEFAULT_BRAND_SETTINGS: BrandSettings = {
   name: "",
@@ -105,7 +104,7 @@ export async function POST(request: Request) {
     hashtags: carousel.hashtags,
   };
 
-  const brand = DEFAULT_BRAND_SETTINGS;
+  const brand = (await getBrandSettings(userId)) ?? DEFAULT_BRAND_SETTINGS;
 
   try {
     if (slideIndex !== undefined) {

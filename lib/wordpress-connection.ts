@@ -26,15 +26,15 @@ const ENCRYPTED_PREFIX = "enc:";
  * only via a dynamic `import()` — so this file (and anything that imports
  * it) keeps compiling/building even before lib/crypto.ts lands.
  *
- * Contract assumed here (to be confirmed with the settings-agent / at
- * integration time): the module exports a `decrypt(value: string): string`
- * function, taking the ciphertext WITHOUT the "enc:" prefix and returning
- * the original plaintext. A `decryptSecret` export is tried as a fallback
- * name in case the settings-agent lands it under that name instead.
+ * Confirmed contract (integrated): lib/crypto.ts exports
+ * `decrypt(value: string): string`, which takes the value WITH its "enc:"
+ * prefix intact (it strips the prefix itself and passes through
+ * non-prefixed values unchanged). So the full `encryptedValue` — not a
+ * stripped ciphertext — must be passed through. A `decryptSecret` export is
+ * tried as a fallback name in case a future revision lands it under that
+ * name instead.
  */
 async function decryptAppPassword(encryptedValue: string): Promise<string> {
-  const ciphertext = encryptedValue.slice(ENCRYPTED_PREFIX.length);
-
   let cryptoModule: Record<string, unknown>;
   try {
     // Import via a non-literal specifier so TypeScript doesn't try to
@@ -59,7 +59,8 @@ async function decryptAppPassword(encryptedValue: string): Promise<string> {
     );
   }
 
-  return decryptFn(ciphertext);
+  // Pass the full value (with "enc:" prefix) — decrypt() strips it itself.
+  return decryptFn(encryptedValue);
 }
 
 /**
