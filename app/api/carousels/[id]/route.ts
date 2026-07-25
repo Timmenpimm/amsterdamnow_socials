@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveApiUserId } from "@/lib/api-auth";
-import { carouselUpdateSchema } from "@/lib/carousel-schema";
+import {
+  carouselUpdateSchema,
+  slidesSchema,
+  type CarouselUpdateInput,
+} from "@/lib/carousel-schema";
+import { nowStoredSlidesSchema } from "@/lib/now-carousel";
 import {
   CarouselDeleteNotAllowedError,
   CarouselNotFoundError,
@@ -15,6 +20,29 @@ import {
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
+
+/**
+ * PATCH body. Identical to lib/carousel-schema.ts's carouselUpdateSchema
+ * except for `slides`, which additionally accepts the Amsterdam NOW slide
+ * shape ({ index, slideType, values } — lib/now-carousel.ts). The satori
+ * branch of the union is tried first and is unchanged, so satori carousels
+ * validate exactly as before; the NOW editor can now save its own slides
+ * through the same endpoint instead of being rejected with 400.
+ */
+const carouselPatchSchema = z
+  .object({
+    ...carouselUpdateSchema.shape,
+    slides: z.union([slidesSchema, nowStoredSlidesSchema]).optional(),
+  })
+  .refine(
+    (value) =>
+      value.slides !== undefined ||
+      value.caption !== undefined ||
+      value.hashtags !== undefined ||
+      value.template !== undefined ||
+      value.status !== undefined,
+    { message: "At least one field must be provided." }
+  );
 
 /** GET /api/carousels/[id] — one carousel, with its parent article. */
 export async function GET(request: Request, { params }: RouteParams) {
@@ -67,7 +95,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     );
   }
 
-  const parsed = carouselUpdateSchema.safeParse(body);
+  const parsed = carouselPatchSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Invalid input.", issues: z.treeifyError(parsed.error) },
@@ -76,7 +104,13 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   }
 
   try {
-    const carousel = await updateCarouselForUser(id, userId, parsed.data);
+    // `slides` is stored as opaque JSON either way (lib/carousels.ts casts it
+    // to Prisma.InputJsonValue); the cast only bridges the widened union.
+    const carousel = await updateCarouselForUser(
+      id,
+      userId,
+      parsed.data as CarouselUpdateInput
+    );
     return NextResponse.json({ carousel });
   } catch (error) {
     if (error instanceof CarouselNotFoundError) {

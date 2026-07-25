@@ -6,29 +6,78 @@ import { Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { TEMPLATE_METADATA_LIST } from "@/lib/template-metadata";
+import { NOW_FAMILY_PLANS, nowTemplateId } from "@/lib/now-carousel";
 import type { TemplateId } from "@/templates";
 
-interface TemplateSelectProps {
-  value?: TemplateId;
-  onSelect: (id: TemplateId) => void;
-  disabled?: boolean;
-  triggerLabel?: string;
+/**
+ * Every id this dropdown can produce: a generic satori template id, or an
+ * Amsterdam NOW family id (`now:hotspot` | `now:lijstje` | `now:agenda` |
+ * `now:gids` | `now:event`). Kept as a documented union instead of a bare
+ * string so callers still get autocompletion.
+ */
+export type NowTemplateId = `now:${(typeof NOW_FAMILY_PLANS)[number]["family"]}`;
+export type CarouselTemplateId = TemplateId | NowTemplateId;
+
+interface TemplateOption {
+  id: CarouselTemplateId;
+  name: string;
+  description: string;
 }
 
+interface TemplateOptionGroup {
+  label: string;
+  options: TemplateOption[];
+}
+
+const GENERIC_GROUP: TemplateOptionGroup = {
+  label: "Algemeen",
+  options: TEMPLATE_METADATA_LIST.map((template) => ({
+    id: template.id,
+    name: template.name,
+    description: template.description,
+  })),
+};
+
+const NOW_GROUP: TemplateOptionGroup = {
+  label: "Amsterdam NOW",
+  options: NOW_FAMILY_PLANS.map((plan) => ({
+    id: nowTemplateId(plan.family) as NowTemplateId,
+    name: plan.label,
+    description: plan.purpose,
+  })),
+};
+
 /**
- * Small dropdown for picking one of the satori templates, showing each
- * option's name + short description. Reused by the "generate carousel"
- * action on the posts page and the template switcher in the carousel
- * editor. Deliberately hand-rolled (no Radix Select/Popover) since this
- * project has no such dependency yet and the interaction is simple enough
- * for a plain absolutely-positioned panel + outside-click handling.
+ * Small dropdown for picking a carousel template, showing each option's
+ * name + short description. Reused by the "generate carousel" action on the
+ * posts page (which opts into the Amsterdam NOW families via `includeNow`)
+ * and by the template switcher in the carousel editor — that one stays on
+ * the generic satori templates, since an existing carousel's slides can't be
+ * re-pointed at a different slide model. Deliberately hand-rolled (no Radix
+ * Select/Popover) since this project has no such dependency yet and the
+ * interaction is simple enough for a plain absolutely-positioned panel +
+ * outside-click handling.
+ *
+ * Generic in the id type so a caller that only handles TemplateId keeps its
+ * narrow callback signature, while the generate flow can accept
+ * CarouselTemplateId.
  */
-export function TemplateSelect({
+interface TemplateSelectProps<T extends string = CarouselTemplateId> {
+  value?: T;
+  onSelect: (id: T) => void;
+  disabled?: boolean;
+  triggerLabel?: string;
+  /** Also offer the Amsterdam NOW families (grouped separately). */
+  includeNow?: boolean;
+}
+
+export function TemplateSelect<T extends string = CarouselTemplateId>({
   value,
   onSelect,
   disabled,
   triggerLabel,
-}: TemplateSelectProps) {
+  includeNow = false,
+}: TemplateSelectProps<T>) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +105,10 @@ export function TemplateSelect({
     };
   }, [open]);
 
-  const selected = TEMPLATE_METADATA_LIST.find((t) => t.id === value);
+  const groups = includeNow ? [NOW_GROUP, GENERIC_GROUP] : [GENERIC_GROUP];
+  const selected = groups
+    .flatMap((group) => group.options)
+    .find((option) => option.id === value);
   const label = triggerLabel ?? selected?.name ?? "Kies een template";
 
   return (
@@ -76,35 +128,44 @@ export function TemplateSelect({
       {open && (
         <div
           role="listbox"
-          className="absolute z-20 mt-2 w-72 rounded-md border border-border bg-popover p-1 shadow-md"
+          className="absolute z-20 mt-2 max-h-96 w-72 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md"
         >
-          {TEMPLATE_METADATA_LIST.map((template) => {
-            const isSelected = template.id === value;
-            return (
-              <button
-                key={template.id}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => {
-                  onSelect(template.id);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "flex w-full flex-col items-start gap-0.5 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
-                  isSelected && "bg-accent/60"
-                )}
-              >
-                <span className="flex w-full items-center justify-between gap-2 font-medium">
-                  {template.name}
-                  {isSelected && <Check className="size-4 shrink-0" />}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {template.description}
-                </span>
-              </button>
-            );
-          })}
+          {groups.map((group) => (
+            <div key={group.label} className="py-1 first:pt-0 last:pb-0">
+              {includeNow && (
+                <p className="px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {group.label}
+                </p>
+              )}
+              {group.options.map((option) => {
+                const isSelected = option.id === value;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => {
+                      onSelect(option.id as T);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full flex-col items-start gap-0.5 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
+                      isSelected && "bg-accent/60"
+                    )}
+                  >
+                    <span className="flex w-full items-center justify-between gap-2 font-medium">
+                      {option.name}
+                      {isSelected && <Check className="size-4 shrink-0" />}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {option.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
     </div>

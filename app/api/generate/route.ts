@@ -4,12 +4,14 @@ import { z } from "zod";
 
 import { resolveApiUserId } from "@/lib/api-auth";
 import { db } from "@/lib/db";
+import { isNowTemplateId, parseNowTemplateId } from "@/lib/now-carousel";
+import { generateNowCarousel } from "@/lib/now-generator";
 import {
   InvalidCarouselOutputError,
   MissingOpenAiKeyError,
   generateCarousel,
 } from "@/lib/openai";
-import { TEMPLATE_IDS } from "@/templates";
+import { TEMPLATE_IDS, isTemplateId } from "@/templates";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -31,14 +33,27 @@ const inlineArticleSchema = z.object({
   tags: z.array(z.string()).optional(),
 });
 
+/**
+ * Template id: one of the generic satori templates, or an Amsterdam NOW
+ * family (`now:hotspot`, `now:lijstje`, …). NOW ids are checked via
+ * isNowTemplateId() so adding a family to NOW_FAMILY_PLANS is enough — no
+ * list to keep in sync here.
+ */
+const templateSchema = z
+  .string()
+  .trim()
+  .refine((value) => isTemplateId(value) || isNowTemplateId(value), {
+    message: `template must be one of ${TEMPLATE_IDS.join(", ")} or a "now:<family>" id`,
+  });
+
 const generateRequestSchema = z.union([
   z.object({
     articleId: z.string().trim().min(1, "articleId is required"),
-    template: z.enum(TEMPLATE_IDS).optional(),
+    template: templateSchema.optional(),
   }),
   z.object({
     article: inlineArticleSchema,
-    template: z.enum(TEMPLATE_IDS).optional(),
+    template: templateSchema.optional(),
   }),
 ]);
 
@@ -54,7 +69,9 @@ const STUB_CONNECTION_URL = "https://www.amsterdamnow.com";
  *   or: { article: { wordpressId, title, contentHtml, ... }, template?: string }
  *
  * Generates AI carousel content for one of the current user's articles and
- * stores it as a new Carousel row (status DRAFT). Article.status tracks the
+ * stores it as a new Carousel row (status DRAFT). `template` picks the
+ * pipeline: a satori template id uses lib/openai.ts, a `now:<family>` id
+ * uses lib/now-generator.ts. Article.status tracks the
  * generation lifecycle: GENERATING while running, GENERATED on success,
  * FAILED on error.
  *
@@ -109,6 +126,9 @@ export async function POST(request: Request) {
     title: string;
     content: string;
     excerpt: string | null;
+    // Only read by the NOW generator (cover image); the satori path fills
+    // images later in the render pipeline.
+    imageUrl: string | null;
   };
 
   if ("articleId" in parsed.data) {
@@ -184,19 +204,34 @@ export async function POST(request: Request) {
     data: { status: "GENERATING" },
   });
 
+  // `now:<family>` routes to the Amsterdam NOW generator (manifest-shaped
+  // slides); anything else keeps the original satori path.
+  const nowFamily = template ? parseNowTemplateId(template) : null;
+
   try {
-    const content = await generateCarousel({
-      title: article.title,
-      content: article.content,
-      excerpt: article.excerpt,
-    });
+    const content = nowFamily
+      ? await generateNowCarousel(
+          {
+            title: article.title,
+            content: article.content,
+            excerpt: article.excerpt,
+          },
+          nowFamily,
+          { imageUrl: article.imageUrl }
+        )
+      : await generateCarousel({
+          title: article.title,
+          content: article.content,
+          excerpt: article.excerpt,
+        });
 
     const carousel = await db.carousel.create({
       data: {
         articleId: article.id,
         template: template ?? DEFAULT_TEMPLATE,
-        // Slide[] is a JSON-serializable shape (see types/carousel.ts) but
-        // isn't structurally identical to Prisma's generic Json input type.
+        // Slide[] (types/carousel.ts) and NowStoredSlide[] (lib/now-carousel.ts)
+        // are both JSON-serializable shapes, but neither is structurally
+        // identical to Prisma's generic Json input type.
         slides: content.slides as unknown as Prisma.InputJsonValue,
         caption: content.caption,
         hashtags: content.hashtags,

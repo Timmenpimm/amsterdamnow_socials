@@ -6,9 +6,11 @@ import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { TemplateSelect } from "@/components/dashboard/template-select";
+import {
+  TemplateSelect,
+  type CarouselTemplateId,
+} from "@/components/dashboard/template-select";
 import { TEMPLATE_METADATA_LIST } from "@/lib/template-metadata";
-import type { TemplateId } from "@/templates";
 
 interface GenerateCarouselButtonProps {
   articleId: string;
@@ -23,7 +25,8 @@ interface GenerateErrorResponse {
 }
 
 /**
- * Per-article-row action: pick one of the satori templates, POST
+ * Per-article-row action: pick a template (satori or an Amsterdam NOW
+ * family), POST
  * /api/generate, then navigate straight into the new carousel's editor on
  * success. Relies on a <Toaster/> already mounted elsewhere on the posts
  * page (see components/dashboard/posts-import-button.tsx) rather than
@@ -34,7 +37,7 @@ export function GenerateCarouselButton({
   articleId,
 }: GenerateCarouselButtonProps) {
   const router = useRouter();
-  const [template, setTemplate] = useState<TemplateId>(
+  const [template, setTemplate] = useState<CarouselTemplateId>(
     TEMPLATE_METADATA_LIST[0].id
   );
   const [isGenerating, setIsGenerating] = useState(false);
@@ -76,7 +79,12 @@ export function GenerateCarouselButton({
 
   return (
     <div className="flex items-center justify-end gap-2">
-      <TemplateSelect value={template} onSelect={setTemplate} disabled={isGenerating} />
+      <TemplateSelect
+        value={template}
+        onSelect={setTemplate}
+        disabled={isGenerating}
+        includeNow
+      />
       <Button size="sm" onClick={handleGenerate} disabled={isGenerating}>
         {isGenerating ? (
           <Loader2 className="animate-spin" />
