@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import { listCarouselsForUser } from "@/lib/carousels";
 
 /**
@@ -11,9 +11,8 @@ import { listCarouselsForUser } from "@/lib/carousels";
  * the parent article's title/image attached so the dashboard can render a
  * list without a second round-trip.
  */
-export async function GET() {
-  const session = await auth();
-  const userId = session?.user?.id;
+export async function GET(request: Request) {
+  const userId = await resolveApiUserId(request);
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });

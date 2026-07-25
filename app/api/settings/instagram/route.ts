@@ -1,26 +1,26 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import {
   getInstagramConnection,
   instagramConnectionSchema,
   saveInstagramConnection,
 } from "@/lib/connections";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
+export async function GET(request: Request) {
+  const userId = await resolveApiUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const connection = await getInstagramConnection(session.user.id);
+  const connection = await getInstagramConnection(userId);
   return NextResponse.json({ connection });
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await resolveApiUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
@@ -43,10 +43,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const connection = await saveInstagramConnection(
-      session.user.id,
-      parsed.data
-    );
+    const connection = await saveInstagramConnection(userId, parsed.data);
     return NextResponse.json({ connection });
   } catch (error) {
     console.error("Failed to save Instagram connection:", error);

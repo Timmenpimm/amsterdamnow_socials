@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import { carouselUpdateSchema } from "@/lib/carousel-schema";
 import {
   CarouselDeleteNotAllowedError,
@@ -17,9 +17,8 @@ interface RouteParams {
 }
 
 /** GET /api/carousels/[id] — one carousel, with its parent article. */
-export async function GET(_request: Request, { params }: RouteParams) {
-  const session = await auth();
-  const userId = session?.user?.id;
+export async function GET(request: Request, { params }: RouteParams) {
+  const userId = await resolveApiUserId(request);
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -50,8 +49,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
  * toggle — see lib/carousels.ts's transition table.
  */
 export async function PATCH(request: Request, { params }: RouteParams) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = await resolveApiUserId(request);
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -101,9 +99,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
  * DELETE /api/carousels/[id]
  * Refuses to delete carousels currently PUBLISHING or PUBLISHED.
  */
-export async function DELETE(_request: Request, { params }: RouteParams) {
-  const session = await auth();
-  const userId = session?.user?.id;
+export async function DELETE(request: Request, { params }: RouteParams) {
+  const userId = await resolveApiUserId(request);
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });

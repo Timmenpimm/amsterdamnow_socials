@@ -1,26 +1,26 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import {
   brandSettingsSchema,
   getBrandSettings,
   saveBrandSettings,
 } from "@/lib/connections";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
+export async function GET(request: Request) {
+  const userId = await resolveApiUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const settings = await getBrandSettings(session.user.id);
+  const settings = await getBrandSettings(userId);
   return NextResponse.json({ settings });
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await resolveApiUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const settings = await saveBrandSettings(session.user.id, parsed.data);
+    const settings = await saveBrandSettings(userId, parsed.data);
     return NextResponse.json({ settings });
   } catch (error) {
     console.error("Failed to save brand settings:", error);
