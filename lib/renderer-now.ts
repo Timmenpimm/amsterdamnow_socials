@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, type Browser } from 'playwright';
+import type { Browser } from 'playwright-core';
 import {
   getNowTemplateSpec,
   type NowTemplateFamily,
@@ -14,11 +14,74 @@ import {
  * (templates/now/*.html). Reads a template, string-replaces its {{placeholder}}
  * tokens, and screenshots it at the exact pixel size declared in the manifest.
  *
- * Not deployable on Vercel serverless as-is (no headless-browser runtime there) —
- * see docs/design/social-templates/INTEGRATIE.md for deployment options.
+ * Two runtimes, one code path:
+ *   - local/dev  -> the full `playwright` package (devDependency) with the
+ *                   Chromium it downloaded on install.
+ *   - Vercel/AWS -> `playwright-core` driving the Lambda-optimised Chromium
+ *                   from `@sparticuz/chromium` (option 2 in
+ *                   docs/design/social-templates/INTEGRATIE.md).
+ *
+ * Both must stay in `serverExternalPackages` (next.config.ts): they resolve
+ * binaries through relative paths that break once bundled.
  */
 
-const TEMPLATES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'templates', 'now');
+/** Serverless (Vercel function / AWS Lambda) vs. a normal Node process. */
+function isServerlessRuntime(): boolean {
+  return Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
+
+/**
+ * Thrown when no Chromium can be started at all (missing binary, no
+ * executable path, sandbox refused). Callers map this to 503 "not available
+ * in this environment" instead of a generic 500 — see app/api/render/route.ts.
+ */
+export class NowRendererUnavailableError extends Error {
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = 'NowRendererUnavailableError';
+    this.cause = cause;
+  }
+}
+
+export function isNowRendererUnavailable(error: unknown): boolean {
+  return error instanceof NowRendererUnavailableError;
+}
+
+/**
+ * Where templates/now/*.html live at runtime. cwd first (correct for
+ * `next dev`, `next start` and scripts run from the repo root), module-relative
+ * second — the module path is unreliable inside the serverless bundle, which is
+ * exactly why app/api/templates/import/builtin/route.ts resolves it the same
+ * way. next.config.ts traces the files into both routes.
+ */
+const TEMPLATE_DIR_CANDIDATES = [
+  path.join(process.cwd(), 'templates', 'now'),
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'templates', 'now'),
+];
+
+/** Template HTML never changes at runtime, so one read per file per process. */
+const templateHtmlCache = new Map<string, string>();
+
+async function readTemplateHtml(file: string): Promise<string> {
+  const cached = templateHtmlCache.get(file);
+  if (cached !== undefined) return cached;
+
+  for (const dir of TEMPLATE_DIR_CANDIDATES) {
+    try {
+      const html = await readFile(path.join(dir, file), 'utf-8');
+      templateHtmlCache.set(file, html);
+      return html;
+    } catch {
+      // Try the next candidate directory.
+    }
+  }
+
+  throw new NowRendererUnavailableError(
+    `NOW template "${file}" not found. Tried: ${TEMPLATE_DIR_CANDIDATES.join(', ')}.`
+  );
+}
 
 export interface RenderNowSlideInput {
   family: NowTemplateFamily;
@@ -32,19 +95,66 @@ export interface RenderNowSlideInput {
 // what actually gets closed in the try/finally blocks below.
 let browserPromise: Promise<Browser> | null = null;
 
-function getBrowser(): Promise<Browser> {
-  if (!browserPromise) {
-    browserPromise = chromium.launch({ headless: true });
+async function launchBrowser(): Promise<Browser> {
+  if (isServerlessRuntime()) {
+    // playwright is a devDependency and simply isn't there on Vercel.
+    const [{ chromium }, sparticuz] = await Promise.all([
+      import('playwright-core'),
+      import('@sparticuz/chromium'),
+    ]);
+    const serverlessChromium = sparticuz.default;
+
+    // The templates are plain HTML/CSS with base64-embedded fonts — no WebGL —
+    // so skipping the swiftshader extraction saves cold-start time and /tmp space.
+    serverlessChromium.setGraphicsMode = false;
+
+    return chromium.launch({
+      args: serverlessChromium.args,
+      executablePath: await serverlessChromium.executablePath(),
+      headless: true,
+    });
   }
-  return browserPromise;
+
+  // Local/dev: the full playwright package with its downloaded Chromium.
+  const { chromium } = await import('playwright');
+  return chromium.launch({ headless: true });
+}
+
+function getBrowser(): Promise<Browser> {
+  if (browserPromise) return browserPromise;
+
+  const pending: Promise<Browser> = launchBrowser().then(
+    (browser) => {
+      // A crashed/OOM-killed browser must not stay cached as "ready".
+      browser.on('disconnected', () => {
+        if (browserPromise === pending) browserPromise = null;
+      });
+      return browser;
+    },
+    (error: unknown) => {
+      // Never poison the cache with a rejected promise: the next request
+      // gets a fresh launch attempt.
+      if (browserPromise === pending) browserPromise = null;
+      throw new NowRendererUnavailableError(
+        `Could not launch Chromium for the NOW renderer (${
+          isServerlessRuntime() ? 'serverless' : 'local'
+        } mode): ${error instanceof Error ? error.message : String(error)}`,
+        error
+      );
+    }
+  );
+
+  browserPromise = pending;
+  return pending;
 }
 
 /** Explicitly shut down the cached browser. Call this once a script/process is fully done rendering. */
 export async function closeNowRendererBrowser(): Promise<void> {
   if (!browserPromise) return;
-  const browser = await browserPromise;
+  const pending = browserPromise;
   browserPromise = null;
-  await browser.close();
+  const browser = await pending.catch(() => null);
+  await browser?.close();
 }
 
 function escapeHtml(value: string): string {
@@ -133,8 +243,7 @@ async function renderSpec(
   spec: NowTemplateSpec,
   values: Record<string, string>
 ): Promise<Buffer> {
-  const templatePath = path.join(TEMPLATES_DIR, spec.file);
-  const rawHtml = await readFile(templatePath, 'utf-8');
+  const rawHtml = await readTemplateHtml(spec.file);
   const html = applyReplacements(rawHtml, buildReplacements(spec, values));
 
   const context = await browser.newContext({ viewport: spec.dimensions, deviceScaleFactor: 1 });

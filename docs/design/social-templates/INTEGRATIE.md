@@ -46,23 +46,75 @@ uiteindelijk hoe `CarouselContent.slides` naar NOW-slidetypes vertaald wordt
 uit het brontype van het WordPress-artikel of een expliciete gebruikerskeuze
 volgen, niet uit `SlideLayout` alleen).
 
-## Open beslispunt: deployment
+## Deployment: gekozen optie 2 (`@sparticuz/chromium`)
 
-**Playwright draait niet op Vercel serverless as-is** (geen headless-browser
-runtime beschikbaar in de standaard Node.js function runtime; Chromium-binary
-is te groot/niet compatibel met de gebruikelijke deployment bundle). Opties,
-nog niet gekozen:
+**Status: geïmplementeerd.** `POST /api/render` rendert nu beide paden. Bij een
+carrousel met `template = "now:<family>"` gaat de request naar
+`lib/renderer-now.ts` (Playwright → HTML → PNG); elk ander bekend template-id
+blijft ongewijzigd via satori lopen. De response is in beide gevallen
+`{ slides: [{ index, dataUrl }] }`, dus de preview-editor merkt het verschil niet.
+
+### Hoe het werkt
+
+| Omgeving | Launcher | Chromium |
+|---|---|---|
+| lokaal / dev / scripts | `playwright` (devDependency) | de door Playwright gedownloade Chromium |
+| Vercel / AWS Lambda | `playwright-core` (dependency) | `@sparticuz/chromium` — `executablePath()` + `args` |
+
+De keuze gebeurt op runtime in `lib/renderer-now.ts`:
+`process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME` → serverless-tak,
+anders de lokale tak. Beide takken worden dynamisch geïmporteerd, zodat
+`playwright` (die op Vercel niet geïnstalleerd is) daar nooit geladen wordt.
+
+Verder:
+
+- Eén gecachede browser per process (warme invocaties hergebruiken hem). Een
+  mislukte launch wist de cache, zodat de volgende request opnieuw probeert;
+  een gecrashte browser wist de cache via `disconnected`.
+- `setGraphicsMode = false`: de templates zijn HTML/CSS met base64-ingesloten
+  fonts, geen WebGL — dat scheelt het uitpakken van `swiftshader.tar.br` bij een
+  cold start.
+- Launch-fouten worden een `NowRendererUnavailableError` → de route antwoordt
+  **503** ("NOW-rendering niet beschikbaar in deze omgeving") in plaats van een
+  generieke 500. Andere renderfouten → 500, ongeldige slides → **422** met
+  `issues[]` uit `validateNowSlides()`.
+- `next.config.ts`: `@sparticuz/chromium`, `playwright-core` en `playwright`
+  staan in `serverExternalPackages` (ze resolven binaries via relatieve paden en
+  mogen niet gebundeld worden), en `templates/now/*.html` wordt via
+  `outputFileTracingIncludes` ook naar `/api/render` getraceerd. De renderer
+  zoekt de HTML eerst vanaf `process.cwd()` en pas daarna module-relatief —
+  hetzelfde patroon als `app/api/templates/import/builtin/route.ts`.
+
+### Openstaande caveats
+
+- **Cold start.** Eerste render na een koude functie: Chromium-binary
+  decomprimeren naar `/tmp` + launch. Reken op enkele seconden bovenop de
+  render zelf; `maxDuration = 60` op de route is daarop berekend, maar een
+  lange carrousel (8 gids-items) plus cold start kan er tegenaan lopen.
+- **Bundle size.** `@sparticuz/chromium` is >50 MB (brotli). Dat past binnen de
+  Vercel-limiet, maar samen met de rest van de app zit er weinig marge. Loopt
+  het alsnog vast, dan is `@sparticuz/chromium-min` + een externe
+  `chromium-pack.tar` het alternatief.
+- **Geheugen.** Sparticuz adviseert minimaal 512 MB, liefst 1600 MB+. De
+  Vercel-functie moet dus op een ruim memory-profiel staan; op de default kan
+  Chromium OOM-killed worden (zichtbaar als 503 via de disconnected-cache).
+- **Node-versie.** `@sparticuz/chromium@149` declareert
+  `engines: node ^22.17.0 || >=24.0.0`. De Node-versie van het Vercel-project
+  moet daaraan voldoen (22.17+ of 24.x).
+- **Niet lokaal te testen.** De meegeleverde Chromium is een Linux-binary; op
+  macOS faalt de serverless-tak met `spawn ENOEXEC` (netjes afgevangen als 503).
+  De echte serverless render is dus pas op een Vercel-deploy te verifiëren.
+
+### Overwogen alternatieven
+
+Voor de volledigheid — de opties die niet gekozen zijn:
 
 1. **Aparte render-worker** — een klein los service (Fly.io, Render, Railway,
    AWS Fargate/ECS, of een always-on VM) met Playwright + Chromium
    geïnstalleerd, die de Next.js app via een interne API aanroept
    (`POST /render` met `{family, slideType, values}` → PNG). Meest robuust,
    voegt wel een deploybaar component toe.
-2. **`@sparticuz/chromium`** — een voor AWS Lambda/Vercel-functions
-   geoptimaliseerde Chromium-build, gebruikt met `playwright-core` of
-   `puppeteer-core` in plaats van de volledige `playwright`-package. Blijft
-   binnen Vercel, maar cold starts zijn trager en er zijn package-size- en
-   architectuurbeperkingen (moet matchen met de Vercel function runtime).
+2. ~~**`@sparticuz/chromium`**~~ — dit is de gekozen optie, zie hierboven.
 3. **Pre-renderen, niet on-demand** — carrousels/stories worden lokaal of in
    CI gerenderd (bijv. na goedkeuring in de preview-editor) en de PNG's gaan
    naar blob storage (Vercel Blob / S3); de productie-app serveert dan alleen
@@ -70,6 +122,6 @@ nog niet gekozen:
    hoeft te draaien. Past goed bij een editorial workflow (content wordt
    vooraf goedgekeurd, niet realtime gegenereerd bij page-view).
 
-Voorlopig advies: optie 3 voor de eerste werkende versie (render gebeurt in
-de preview-editor / een lokaal of CI-proces, resultaat wordt opgeslagen), met
-optie 1 als upgrade-pad zodra render-on-demand nodig is.
+Optie 3 blijft een zinnige aanvulling (Fase 6: gerenderde PNG's naar blob
+storage in plaats van base64 data-URLs), en optie 1 is het upgrade-pad zodra
+cold starts of bundle size op Vercel echt gaan knellen.
