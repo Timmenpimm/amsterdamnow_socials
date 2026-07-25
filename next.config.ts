@@ -34,9 +34,14 @@ const nextConfig: NextConfig = {
     // through a static import, so tracing misses them and the serverless
     // launch dies with "Cannot find module '.../playwright-core/browsers.json'".
     // Shipping the whole package (~12 MB) with this route is the fix.
+    // @sparticuz/chromium needs the same: it unpacks its brotli-compressed
+    // Chromium from its own bin/ directory at request time, so that directory
+    // has to be in the bundle too ("The input directory .../bin does not
+    // exist"). Together with playwright-core this is ~78 MB in this route.
     "/api/render": [
       "./templates/now/*.html",
       "./node_modules/playwright-core/**",
+      "./node_modules/@sparticuz/chromium/**",
     ],
   },
 };
