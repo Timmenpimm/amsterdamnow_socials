@@ -28,7 +28,16 @@ const nextConfig: NextConfig = {
     "/api/templates/import/builtin": ["./templates/now/*.html"],
     // Same story for the render route: lib/renderer-now.ts reads
     // templates/now/<spec.file> at request time.
-    "/api/render": ["./templates/now/*.html"],
+    //
+    // playwright-core needs the same treatment for a different reason: it
+    // loads browsers.json and its bundled driver files at runtime instead of
+    // through a static import, so tracing misses them and the serverless
+    // launch dies with "Cannot find module '.../playwright-core/browsers.json'".
+    // Shipping the whole package (~12 MB) with this route is the fix.
+    "/api/render": [
+      "./templates/now/*.html",
+      "./node_modules/playwright-core/**",
+    ],
   },
 };
 
