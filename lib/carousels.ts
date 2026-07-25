@@ -93,19 +93,33 @@ export function canMutateCarouselContent(status: CarouselStatus): boolean {
  * CarouselWithArticle shape instead of re-declaring this include.
  */
 export const withArticleTitle = {
-  article: { select: { id: true, title: true, imageUrl: true } },
+  article: {
+    select: { id: true, wordpressId: true, title: true, imageUrl: true },
+  },
 } satisfies Prisma.CarouselInclude;
 
 export type CarouselWithArticle = Prisma.CarouselGetPayload<{
   include: typeof withArticleTitle;
 }>;
 
-/** All carousels belonging to `userId`, newest first. */
+/**
+ * All carousels belonging to `userId`, newest first. Optionally narrowed to
+ * carousels whose parent article has the given WordPress post id (used by
+ * external callers looking up carousels by WP post).
+ */
 export async function listCarouselsForUser(
-  userId: string
+  userId: string,
+  options?: { wordpressId?: number }
 ): Promise<CarouselWithArticle[]> {
   return db.carousel.findMany({
-    where: { article: { connection: { userId } } },
+    where: {
+      article: {
+        connection: { userId },
+        ...(options?.wordpressId !== undefined
+          ? { wordpressId: options.wordpressId }
+          : {}),
+      },
+    },
     include: withArticleTitle,
     orderBy: { createdAt: "desc" },
   });

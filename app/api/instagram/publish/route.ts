@@ -20,6 +20,7 @@ import {
 // with the render pipeline transitively via lib/instagram-publish.ts, so
 // keep it on the Node runtime for consistency.
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const publishRequestSchema = z.object({
   carouselId: z.string().trim().min(1, "carouselId is required"),

@@ -12,22 +12,55 @@ import {
 import { TEMPLATE_IDS } from "@/templates";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const DEFAULT_TEMPLATE = TEMPLATE_IDS[0];
 
-const generateRequestSchema = z.object({
-  articleId: z.string().trim().min(1, "articleId is required"),
-  template: z.enum(TEMPLATE_IDS).optional(),
+/**
+ * Inline article payload for external callers (e.g. the artikel-tool) that
+ * push content directly instead of importing it from WordPress first. The
+ * article is upserted on [connectionId, wordpressId] before generation.
+ */
+const inlineArticleSchema = z.object({
+  wordpressId: z.number().int().positive(),
+  title: z.string().trim().min(1).max(500),
+  contentHtml: z.string().min(1).max(100_000),
+  excerpt: z.string().optional(),
+  imageUrl: z.string().url().optional(),
+  categories: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
 });
+
+const generateRequestSchema = z.union([
+  z.object({
+    articleId: z.string().trim().min(1, "articleId is required"),
+    template: z.enum(TEMPLATE_IDS).optional(),
+  }),
+  z.object({
+    article: inlineArticleSchema,
+    template: z.enum(TEMPLATE_IDS).optional(),
+  }),
+]);
+
+/**
+ * Fallback stub URL for the auto-created WordPressConnection when an
+ * external caller pushes an inline article but has no connection yet.
+ */
+const STUB_CONNECTION_URL = "https://www.amsterdamnow.com";
 
 /**
  * POST /api/generate
  * Body: { articleId: string, template?: string }
+ *   or: { article: { wordpressId, title, contentHtml, ... }, template?: string }
  *
  * Generates AI carousel content for one of the current user's articles and
  * stores it as a new Carousel row (status DRAFT). Article.status tracks the
  * generation lifecycle: GENERATING while running, GENERATED on success,
  * FAILED on error.
+ *
+ * The inline `article` variant upserts the Article row first (scoped to the
+ * caller's WordPressConnection; a stub connection is created if none exists)
+ * and then follows the exact same generation path.
  */
 export async function POST(request: Request) {
   const userId = await resolveApiUserId(request);
@@ -69,17 +102,81 @@ export async function POST(request: Request) {
     );
   }
 
-  const { articleId, template } = parsed.data;
+  const { template } = parsed.data;
 
-  const article = await db.article.findUnique({
-    where: { id: articleId },
-    include: { connection: { select: { userId: true } } },
-  });
+  let article: {
+    id: string;
+    title: string;
+    content: string;
+    excerpt: string | null;
+  };
 
-  // Same 404 whether the article doesn't exist or belongs to someone else —
-  // avoid leaking which article IDs exist.
-  if (!article || article.connection.userId !== userId) {
-    return NextResponse.json({ error: "Article not found." }, { status: 404 });
+  if ("articleId" in parsed.data) {
+    const { articleId } = parsed.data;
+
+    const found = await db.article.findUnique({
+      where: { id: articleId },
+      include: { connection: { select: { userId: true } } },
+    });
+
+    // Same 404 whether the article doesn't exist or belongs to someone else —
+    // avoid leaking which article IDs exist.
+    if (!found || found.connection.userId !== userId) {
+      return NextResponse.json({ error: "Article not found." }, { status: 404 });
+    }
+
+    article = found;
+  } else {
+    const input = parsed.data.article;
+
+    // Inline articles hang off the caller's WordPressConnection. External
+    // callers may not have configured one yet, so fall back to a stub row
+    // (created directly via Prisma — the settings-flow zod validation with
+    // its min-length credential rules doesn't apply here). A plain "" for
+    // appPassword is safe: decrypt() passes non-"enc:"-prefixed values
+    // through unchanged.
+    let connection = await db.wordPressConnection.findFirst({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!connection) {
+      connection = await db.wordPressConnection.create({
+        data: {
+          userId,
+          url: STUB_CONNECTION_URL,
+          username: "",
+          appPassword: "",
+        },
+      });
+    }
+
+    article = await db.article.upsert({
+      where: {
+        connectionId_wordpressId: {
+          connectionId: connection.id,
+          wordpressId: input.wordpressId,
+        },
+      },
+      update: {
+        title: input.title,
+        content: input.contentHtml,
+        excerpt: input.excerpt ?? null,
+        imageUrl: input.imageUrl ?? null,
+        categories: input.categories ?? [],
+        tags: input.tags ?? [],
+      },
+      create: {
+        connectionId: connection.id,
+        wordpressId: input.wordpressId,
+        title: input.title,
+        content: input.contentHtml,
+        excerpt: input.excerpt ?? null,
+        imageUrl: input.imageUrl ?? null,
+        categories: input.categories ?? [],
+        tags: input.tags ?? [],
+      },
+    });
   }
 
   await db.article.update({

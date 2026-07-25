@@ -13,6 +13,7 @@ import { renderRequestSchema, slidesSchema } from "./schema";
 // satori + @resvg/resvg-js use native/Node APIs (fs, native bindings) and
 // cannot run on the Edge runtime.
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 /**
  * Fallback used when the user hasn't configured brand settings yet
