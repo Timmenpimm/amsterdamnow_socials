@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import { getBrandSettings } from "@/lib/connections/brand";
 import { db } from "@/lib/db";
 import { renderCarousel, renderSlide } from "@/lib/renderer";
@@ -34,8 +34,7 @@ function toDataUrl(png: Buffer): string {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = await resolveApiUserId(request);
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });

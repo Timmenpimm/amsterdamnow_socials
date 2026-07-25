@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import {
   CarouselNotFoundError,
   getCarouselPublishStatusForUser,
@@ -16,8 +16,7 @@ import {
  * request if it wants earlier feedback).
  */
 export async function GET(request: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = await resolveApiUserId(request);
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });

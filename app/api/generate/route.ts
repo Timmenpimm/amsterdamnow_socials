@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 import {
   InvalidCarouselOutputError,
@@ -30,8 +30,7 @@ const generateRequestSchema = z.object({
  * FAILED on error.
  */
 export async function POST(request: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = await resolveApiUserId(request);
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });

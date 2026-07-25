@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import {
   InstagramApiError,
   MissingInstagramCredentialsError,
@@ -45,12 +45,11 @@ function resolveBaseUrl(request: Request): string {
  * Publishes an APPROVED carousel owned by the current user to Instagram.
  * All orchestration (status transitions, public JPEG URL building, Graph
  * API calls/polling) lives in lib/instagram-publish.ts — this route is
- * just session handling, input validation, and error-to-HTTP-status
+ * just auth handling, input validation, and error-to-HTTP-status
  * mapping.
  */
 export async function POST(request: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = await resolveApiUserId(request);
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });

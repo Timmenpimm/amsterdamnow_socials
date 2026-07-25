@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import { instagramTestSchema, testInstagramConnection } from "@/lib/connections";
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await resolveApiUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await testInstagramConnection(session.user.id, parsed.data);
+    const result = await testInstagramConnection(userId, parsed.data);
     return NextResponse.json(result);
   } catch (error) {
     console.error("Failed to test Instagram connection:", error);

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import { regenerateSlideRequestSchema, slidesSchema } from "@/lib/carousel-schema";
 import {
   CarouselNotFoundError,
@@ -28,8 +28,7 @@ export const runtime = "nodejs";
  * OPENAI_API_KEY / MOCK_AI=1 handling.
  */
 export async function POST(request: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = await resolveApiUserId(request);
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });

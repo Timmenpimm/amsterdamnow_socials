@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/auth";
+import { resolveApiUserId } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 import { WordPressApiError, getPosts } from "@/lib/wordpress";
 import {
@@ -23,8 +23,7 @@ const WP_ERROR_STATUS: Record<WordPressApiError["code"], number> = {
 };
 
 export async function POST(request: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = await resolveApiUserId(request);
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
