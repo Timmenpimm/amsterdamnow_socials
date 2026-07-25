@@ -32,6 +32,7 @@ model User {
   connections WordPressConnection[]
   instagramConnection InstagramConnection?
   brandSetting        BrandSetting?
+  templates           Template[]
 }
 
 model WordPressConnection {
@@ -93,6 +94,24 @@ model BrandSetting {
   backgroundColor String  @default("#ffffff")
   fontFamily      String  @default("Inter")
   handle          String?
+}
+
+model Template {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name         String
+  description  String?
+  html         String
+  placeholders Json
+  width        Int     @default(1080)
+  height       Int     @default(1350)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Carousel {
