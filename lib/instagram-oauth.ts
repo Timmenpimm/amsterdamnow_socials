@@ -101,8 +101,19 @@ export function buildAuthorizeUrl(state: string): string {
   url.searchParams.set("client_id", appId);
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", OAUTH_SCOPES);
   url.searchParams.set("state", state);
+
+  // Facebook Login for Business enforces "strict mode": business permissions
+  // may not be requested via a raw scope list; the dialog then errors with
+  // "Invalid Scopes". Instead the permissions live in a Login for Business
+  // configuration in the Meta app, referenced here by META_LOGIN_CONFIG_ID.
+  // The scope fallback remains for apps where strict mode is not enforced.
+  const configId = process.env.META_LOGIN_CONFIG_ID?.trim();
+  if (configId) {
+    url.searchParams.set("config_id", configId);
+  } else {
+    url.searchParams.set("scope", OAUTH_SCOPES);
+  }
 
   return url.toString();
 }
