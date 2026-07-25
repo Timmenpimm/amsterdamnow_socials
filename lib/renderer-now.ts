@@ -61,6 +61,15 @@ function escapeCssUrlValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+/**
+ * Restores literal <br> tags in an already-escaped value. Only used for
+ * placeholders the design contract marks as `allowsLineBreak`, so everything
+ * else in the value stays escaped.
+ */
+function restoreLineBreaks(escaped: string): string {
+  return escaped.replace(/&lt;br\s*\/?&gt;/gi, '<br>');
+}
+
 function padNumeric(value: string, length: number): string {
   return /^\d+$/.test(value) ? value.padStart(length, '0') : value;
 }
@@ -96,7 +105,9 @@ function buildReplacements(spec: NowTemplateSpec, values: Record<string, string>
       ? escapeCssUrlValue(raw)
       : placeholder.enumValues
         ? raw
-        : escapeHtml(raw);
+        : placeholder.allowsLineBreak
+          ? restoreLineBreaks(escapeHtml(raw))
+          : escapeHtml(raw);
 
     replacements.set(placeholder.name, finalValue);
   }
