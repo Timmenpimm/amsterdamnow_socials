@@ -120,8 +120,23 @@ async function launchBrowser(): Promise<Browser> {
   return chromium.launch({ headless: true });
 }
 
-function getBrowser(): Promise<Browser> {
-  if (browserPromise) return browserPromise;
+async function getBrowser(): Promise<Browser> {
+  // A cached browser can be dead without the 'disconnected' handler ever
+  // running: on Vercel the container is frozen between invocations and
+  // Chromium does not survive it, so the next request inherits a stale
+  // handle ("Target page, context or browser has been closed"). Check
+  // liveness before handing it out.
+  if (browserPromise) {
+    const cached = browserPromise;
+    const browser = await cached.catch(() => null);
+    if (browser?.isConnected()) return browser;
+    if (browserPromise === cached) browserPromise = null;
+  }
+
+  return launchAndCache();
+}
+
+function launchAndCache(): Promise<Browser> {
 
   const pending: Promise<Browser> = launchBrowser().then(
     (browser) => {
@@ -257,18 +272,47 @@ async function renderSpec(
   }
 }
 
+/** True for the errors a browser that died mid-render throws. */
+function isDeadBrowserError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /has been closed|Target closed|browser has disconnected|Connection closed/i.test(
+    message
+  );
+}
+
+/**
+ * Renders once, and on a dead-browser error drops the cached handle and
+ * retries with a fresh launch. The container can be frozen between (or even
+ * during) invocations, so this is a normal condition on Vercel, not an
+ * exceptional one.
+ */
+async function renderWithRetry(
+  spec: NowTemplateSpec,
+  values: Record<string, string>
+): Promise<Buffer> {
+  const browser = await getBrowser();
+  try {
+    return await renderSpec(browser, spec, values);
+  } catch (error) {
+    if (!isDeadBrowserError(error)) throw error;
+    browserPromise = null;
+    const fresh = await getBrowser();
+    return renderSpec(fresh, spec, values);
+  }
+}
+
 export async function renderNowSlide(input: RenderNowSlideInput): Promise<Buffer> {
   const spec = getNowTemplateSpec(input.family, input.slideType);
-  const browser = await getBrowser();
-  return renderSpec(browser, spec, input.values);
+  return renderWithRetry(spec, input.values);
 }
 
 export async function renderNowCarousel(slides: RenderNowSlideInput[]): Promise<Buffer[]> {
-  const browser = await getBrowser();
   const results: Buffer[] = [];
   for (const slide of slides) {
     const spec = getNowTemplateSpec(slide.family, slide.slideType);
-    results.push(await renderSpec(browser, spec, slide.values));
+    // Per slide, so a browser that dies halfway through a long carousel
+    // costs one relaunch instead of the whole batch.
+    results.push(await renderWithRetry(spec, slide.values));
   }
   return results;
 }
