@@ -23,7 +23,7 @@ export default function TemplatesPage() {
     <div className="flex flex-1 flex-col gap-8 px-6 py-8 sm:px-8">
       <DashboardPageHeader
         title="Templates"
-        description="Upload je eigen HTML-templates of gebruik de ingebouwde formats voor je carousels."
+        description="Importeer je eigen HTML-templates of gebruik de ingebouwde formats voor je carousels."
       />
 
       <UploadedTemplatesSection />
