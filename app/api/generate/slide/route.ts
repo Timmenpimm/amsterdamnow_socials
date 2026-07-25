@@ -18,6 +18,7 @@ import {
 } from "@/lib/openai";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 /**
  * POST /api/generate/slide
