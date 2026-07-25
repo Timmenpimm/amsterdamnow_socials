@@ -1,21 +1,34 @@
 /**
  * Typed manifest for the Amsterdam NOW render-ready HTML templates.
  *
- * These 11 files (in this same directory) are a verbatim design handoff from
- * Claude Design — see docs/design/social-templates/HANDOFF-README.md. They
+ * These 19 files (in this same directory) are a verbatim design handoff from
+ * Claude Design — see docs/design/social-templates/HANDOFF-README.md for the
+ * hotspot/lijstje/event set and CAROUSEL_PLACEHOLDERS.md for agenda/gids. They
  * are used as-is: {{placeholder}} tokens get string-replaced, then the file
  * is screenshotted at its exact pixel size (lib/renderer-now.ts). Do not
  * reimplement the markup; this manifest only describes it.
  */
 
-export type NowTemplateFamily = 'hotspot' | 'lijstje' | 'event';
+export type NowTemplateFamily =
+  | 'hotspot'
+  | 'lijstje'
+  | 'event'
+  | 'agenda'
+  | 'gids';
 
 export type HotspotSlideType = 'cover' | 'detail' | 'statement' | 'cta';
-export type LijstjeSlideType = 'cover' | 'item' | 'cta';
+export type LijstjeSlideType = 'cover' | 'item' | 'cta' | 'editie-cover';
 export type EventSlideType = 'hook' | 'reason' | 'practical' | 'link';
+export type AgendaSlideType = 'cover' | 'wat' | 'praktisch' | 'cta';
+export type GidsSlideType = 'cover' | 'item' | 'cta';
 
 /** Union of all slide types across families. Scope with `family` for a unique key. */
-export type NowSlideType = HotspotSlideType | LijstjeSlideType | EventSlideType;
+export type NowSlideType =
+  | HotspotSlideType
+  | LijstjeSlideType
+  | EventSlideType
+  | AgendaSlideType
+  | GidsSlideType;
 
 export interface NowPlaceholderSpec {
   /** Token name, without the {{ }} delimiters. */
@@ -34,6 +47,13 @@ export interface NowPlaceholderSpec {
   enumValues?: readonly string[];
   /** Numeric value must be zero-padded to this many digits (e.g. item_nummer -> "01"). */
   zeroPadTo?: number;
+  /**
+   * The design contract lets the editor place a literal <br> in this token to
+   * control where the line breaks (see docs/design/social-templates/
+   * CAROUSEL_PLACEHOLDERS.md). The value is still HTML-escaped; only <br> is
+   * restored afterwards.
+   */
+  allowsLineBreak?: boolean;
 }
 
 export interface NowTemplateSpec {
@@ -54,6 +74,8 @@ export interface NowTemplateSpec {
 const HOTSPOT_DIMENSIONS = { width: 1080, height: 1350 };
 const LIJSTJE_DIMENSIONS = { width: 1080, height: 1350 };
 const EVENT_DIMENSIONS = { width: 1080, height: 1920 };
+const AGENDA_DIMENSIONS = { width: 1080, height: 1350 };
+const GIDS_DIMENSIONS = { width: 1080, height: 1350 };
 
 export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
   // --- Hotspot carousel (new restaurants, shops, places) ---
@@ -200,6 +222,144 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
       max: 1,
       description:
         'Always frame 4. Top third stays clean white for the native Instagram link sticker (added manually in-app).',
+    },
+  },
+
+  // --- Agenda carousel (one event, 4 slides) ---
+  {
+    family: 'agenda',
+    slideType: 'cover',
+    file: 'agenda_cover.html',
+    dimensions: AGENDA_DIMENSIONS,
+    placeholders: [
+      { name: 'cover_image_url', description: 'Full-bleed cover photo URL', isUrl: true },
+      { name: 'kicker', description: 'Uppercase kicker, e.g. "AGENDA" or "CULTUUR"' },
+      { name: 'datum', description: 'Red date bar, single line, e.g. "25 JUL — 16 AUG"' },
+      {
+        name: 'event_titel',
+        description: 'Event title, max ~3 lines of ~20 characters; <br> allowed',
+        allowsLineBreak: true,
+      },
+      { name: 'locatie', description: 'Venue and area, e.g. "NDSM — AMSTERDAM NOORD"' },
+    ],
+    reuse: { min: 1, max: 1, description: 'Always slide 1 of the agenda carousel.' },
+  },
+  {
+    family: 'agenda',
+    slideType: 'wat',
+    file: 'agenda_wat.html',
+    dimensions: AGENDA_DIMENSIONS,
+    placeholders: [
+      { name: 'sfeer_image_url', description: 'Atmospheric photo URL', isUrl: true },
+      { name: 'label', description: 'Uppercase label, e.g. "WAT IS HET?"' },
+      { name: 'reden_zin', description: 'One sentence, max ~120 characters: why go' },
+    ],
+    reuse: { min: 1, max: 1, description: 'Always slide 2.' },
+  },
+  {
+    family: 'agenda',
+    slideType: 'praktisch',
+    file: 'agenda_praktisch.html',
+    dimensions: AGENDA_DIMENSIONS,
+    placeholders: [
+      { name: 'wanneer', description: 'WANNEER value' },
+      { name: 'wanneer_extra', description: 'Secondary line under WANNEER' },
+      { name: 'waar', description: 'WAAR value' },
+      { name: 'waar_extra', description: 'Secondary line under WAAR' },
+      { name: 'tickets', description: 'TICKETS value' },
+      { name: 'tickets_extra', description: 'Secondary line under TICKETS' },
+    ],
+    reuse: { min: 1, max: 1, description: 'Always slide 3, practical info.' },
+  },
+  {
+    family: 'agenda',
+    slideType: 'cta',
+    file: 'agenda_cta.html',
+    dimensions: AGENDA_DIMENSIONS,
+    placeholders: [
+      {
+        name: 'cta_titel',
+        description: 'CTA headline, e.g. "PLAN JE BEZOEK"; <br> allowed',
+        allowsLineBreak: true,
+      },
+      { name: 'cta_sub', description: 'CTA subline, e.g. "Meer in de agenda"' },
+    ],
+    reuse: { min: 1, max: 1, description: 'Always the final slide.' },
+  },
+
+  // --- Gids carousel (cover + 2-8 items + CTA) ---
+  {
+    family: 'gids',
+    slideType: 'cover',
+    file: 'gids_cover.html',
+    dimensions: GIDS_DIMENSIONS,
+    placeholders: [
+      { name: 'cover_image_url', description: 'Full-bleed cover photo URL', isUrl: true },
+      { name: 'kicker', description: 'Uppercase kicker, e.g. "BUURTEN / WEST"' },
+      {
+        name: 'gids_titel',
+        description: 'Guide title; <br> allowed to control line breaks',
+        allowsLineBreak: true,
+      },
+      { name: 'gids_sub', description: 'Guide subtitle' },
+    ],
+    reuse: { min: 1, max: 1, description: 'Always slide 1 of the gids carousel.' },
+  },
+  {
+    family: 'gids',
+    slideType: 'item',
+    file: 'gids_item.html',
+    dimensions: GIDS_DIMENSIONS,
+    placeholders: [
+      { name: 'item_image_url', description: 'Item photo URL', isUrl: true },
+      { name: 'item_categorie', description: 'Small uppercase category label' },
+      { name: 'item_nummer', description: 'Item number, zero-padded: 01, 02, …', zeroPadTo: 2 },
+      { name: 'item_naam', description: 'Item name; <br> allowed', allowsLineBreak: true },
+      { name: 'item_body', description: 'Body copy, max ~110 characters' },
+      {
+        name: 'layout_richting',
+        description: 'Which side the photo sits on; alternate per item for rhythm.',
+        enumValues: ['foto-links', 'foto-rechts'],
+      },
+    ],
+    reuse: {
+      min: 2,
+      max: 8,
+      description:
+        'Reused 2-8x, alternating layout_richting. Also the item slide of the lijstje-editie carousel.',
+    },
+  },
+  {
+    family: 'gids',
+    slideType: 'cta',
+    file: 'gids_cta.html',
+    dimensions: GIDS_DIMENSIONS,
+    placeholders: [
+      {
+        name: 'cta_titel',
+        description: 'CTA headline, e.g. "BEWAAR DEZE GIDS"; <br> allowed',
+        allowsLineBreak: true,
+      },
+      { name: 'cta_sub', description: 'CTA subline' },
+    ],
+    reuse: { min: 1, max: 1, description: 'Always the final slide.' },
+  },
+
+  // --- Lijstje editie-cover (pairs with the gids item slide) ---
+  {
+    family: 'lijstje',
+    slideType: 'editie-cover',
+    file: 'lijstje_editie_cover.html',
+    dimensions: LIJSTJE_DIMENSIONS,
+    placeholders: [
+      { name: 'editie_titel', description: 'Edition title, e.g. "DE BESTE HOTSPOTS VAN JULI 2026"' },
+      { name: 'editie_footer', description: 'Footer line under the title' },
+    ],
+    reuse: {
+      min: 1,
+      max: 1,
+      description:
+        'Alternative opener for a periodic list edition; the items that follow use the gids item slide.',
     },
   },
 ];
