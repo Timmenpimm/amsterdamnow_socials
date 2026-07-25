@@ -85,10 +85,23 @@ export function UploadedTemplatesCard({
           <CardTitle className="min-w-0 truncate" title={template.name}>
             {template.name}
           </CardTitle>
-          <Badge variant="secondary" className="shrink-0">
-            {template.placeholders.length}{" "}
-            {template.placeholders.length === 1 ? "placeholder" : "placeholders"}
-          </Badge>
+          {template.placeholders.length === 0 ? (
+            // Import zonder tokens: dan valt er nog niets te vullen.
+            <Badge
+              variant="outline"
+              className="shrink-0 text-muted-foreground"
+              title="Voeg {{tokens}} toe om deze template te kunnen vullen"
+            >
+              Geen placeholders
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="shrink-0">
+              {template.placeholders.length}{" "}
+              {template.placeholders.length === 1
+                ? "placeholder"
+                : "placeholders"}
+            </Badge>
+          )}
         </div>
         {template.description && (
           <p className="text-sm text-muted-foreground">{template.description}</p>
