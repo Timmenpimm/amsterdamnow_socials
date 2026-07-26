@@ -5,7 +5,17 @@ import { getBrandSettings } from "@/lib/connections/brand";
 import { slidesSchema } from "@/lib/carousel-schema";
 import { db } from "@/lib/db";
 import { verifyRenderToken } from "@/lib/public-render";
+import {
+  nowStoredSlidesSchema,
+  parseNowTemplateId,
+  validateNowSlides,
+} from "@/lib/now-carousel";
 import { renderSlide } from "@/lib/renderer";
+import { renderNowSlide } from "@/lib/renderer-now";
+import type {
+  NowSlideType,
+  NowTemplateFamily,
+} from "@/templates/now/manifest";
 import { isTemplateId } from "@/templates";
 import type { BrandSettings } from "@/types/carousel";
 
@@ -21,9 +31,15 @@ export const runtime = "nodejs";
  * Instead of a session, a valid `?t=` token (see lib/public-render.ts)
  * gates access.
  *
- * Renders through the satori pipeline only (lib/renderer.ts) — the
- * Playwright "NOW" render path (lib/renderer-now.ts) needs a browser
- * binary and cannot run in a serverless function.
+ * Handles both render paths: satori (lib/renderer.ts) for the generic
+ * templates, and the Playwright path (lib/renderer-now.ts) for `now:*`
+ * carousels. The latter needs Chromium, which reaches this function through
+ * the outputFileTracingIncludes entry for this route in next.config.ts.
+ *
+ * NOTE: Instagram fetches these URLs itself while creating the media
+ * container, so a NOW slide is rendered on demand while Meta waits (a few
+ * seconds per slide, more on a cold start). If that ever proves too slow,
+ * the fix is to pre-render at publish time and serve stored bytes here.
  */
 
 interface RouteParams {
@@ -73,6 +89,11 @@ export async function GET(request: Request, { params }: RouteParams) {
 
   if (!carousel) {
     return NextResponse.json({ error: "Carousel not found." }, { status: 404 });
+  }
+
+  const nowFamily = parseNowTemplateId(carousel.template);
+  if (nowFamily) {
+    return renderNowSlideAsJpeg(carousel, nowFamily, slideIndex);
   }
 
   if (!isTemplateId(carousel.template)) {
@@ -131,6 +152,66 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
   } catch (error) {
     console.error("Public slide render failed:", error);
+    return NextResponse.json(
+      { error: "Something went wrong while rendering the slide." },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * NOW carousels: Playwright renders the HTML template at its exact pixel
+ * size, then the PNG is re-encoded to the JPEG Instagram requires. Same
+ * response shape and headers as the satori path above.
+ */
+async function renderNowSlideAsJpeg(
+  carousel: { id: string; slides: unknown; template: string },
+  family: NowTemplateFamily,
+  slideIndex: number
+): Promise<NextResponse> {
+  const parsed = nowStoredSlidesSchema.safeParse(carousel.slides);
+  if (!parsed.success) {
+    console.error("Carousel.slides failed NOW validation:", parsed.error);
+    return NextResponse.json(
+      { error: "Carousel content is corrupted." },
+      { status: 500 }
+    );
+  }
+
+  const problems = validateNowSlides(family, parsed.data);
+  if (problems.length > 0) {
+    console.error(`Carousel ${carousel.id} has invalid NOW slides:`, problems);
+    return NextResponse.json(
+      { error: "Carousel content is corrupted." },
+      { status: 500 }
+    );
+  }
+
+  const slide = parsed.data.find((s) => s.index === slideIndex);
+  if (!slide) {
+    return NextResponse.json({ error: "Slide not found." }, { status: 404 });
+  }
+
+  try {
+    const png = await renderNowSlide({
+      family,
+      slideType: slide.slideType as NowSlideType,
+      values: slide.values,
+    });
+
+    const jpeg = await sharp(png).jpeg({ quality: JPEG_QUALITY }).toBuffer();
+    const body = new Uint8Array(jpeg);
+
+    return new NextResponse(body, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/jpeg",
+        "Content-Length": String(body.byteLength),
+        "Cache-Control": CACHE_CONTROL,
+      },
+    });
+  } catch (error) {
+    console.error("Public NOW slide render failed:", error);
     return NextResponse.json(
       { error: "Something went wrong while rendering the slide." },
       { status: 500 }

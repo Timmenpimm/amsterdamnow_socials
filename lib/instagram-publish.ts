@@ -3,6 +3,7 @@ import "server-only";
 import type { CarouselStatus } from "@prisma/client";
 
 import { slidesSchema } from "@/lib/carousel-schema";
+import { isNowTemplateId, nowStoredSlidesSchema } from "@/lib/now-carousel";
 import {
   CarouselNotFoundError,
   getCarouselForUser,
@@ -112,12 +113,18 @@ export async function publishCarouselForUser(
     throw new MissingInstagramConnectionError();
   }
 
-  const slidesResult = slidesSchema.safeParse(carousel.slides);
-  if (!slidesResult.success) {
+  // Both slide shapes end up as the same list of public image URLs; only the
+  // validation differs. NOW carousels store {index, slideType, values},
+  // satori ones {index, layout, headline, ...}.
+  const slideIndexes = isNowTemplateId(carousel.template)
+    ? nowStoredSlidesSchema.safeParse(carousel.slides)
+    : slidesSchema.safeParse(carousel.slides);
+
+  if (!slideIndexes.success) {
     throw new CorruptedCarouselContentError();
   }
 
-  const slideImageUrls = [...slidesResult.data]
+  const slideImageUrls = [...slideIndexes.data]
     .sort((a, b) => a.index - b.index)
     .map((slide) => publicSlideUrl(baseUrl, carousel.id, slide.index));
 
