@@ -280,10 +280,13 @@ function pickImage(
  */
 export function validateNowSlides(
   family: NowTemplateFamily,
-  slides: NowStoredSlide[]
+  // Deliberately loose: checking whether `slideType` is one this family knows
+  // is exactly what this function is for, so it must accept unvalidated input
+  // straight from the database.
+  slides: readonly { index: number; slideType: string; values: Record<string, string> }[]
 ): string[] {
   const problems: string[] = [];
-  const knownTypes = new Set(
+  const knownTypes = new Set<string>(
     NOW_TEMPLATE_MANIFEST.filter((s) => s.family === family).map(
       (s) => s.slideType
     )
@@ -297,7 +300,8 @@ export function validateNowSlides(
       return;
     }
 
-    const spec = getNowTemplateSpec(family, slide.slideType);
+    // Narrowed by the knownTypes check above.
+    const spec = getNowTemplateSpec(family, slide.slideType as NowSlideType);
     const declared = new Set(spec.placeholders.map((p) => p.name));
 
     for (const placeholder of spec.placeholders) {

@@ -26,6 +26,13 @@ const nextConfig: NextConfig = {
   // they would be missing from the serverless bundle.
   outputFileTracingIncludes: {
     "/api/templates/import/builtin": ["./templates/now/*.html"],
+    // Instagram fetches slide images from this public route, so it renders
+    // NOW slides too and needs the same Chromium payload as /api/render.
+    "/api/public/carousel/[carouselId]/[slideIndex]": [
+      "./templates/now/*.html",
+      "./node_modules/playwright-core/**",
+      "./node_modules/@sparticuz/chromium/**",
+    ],
     // Same story for the render route: lib/renderer-now.ts reads
     // templates/now/<spec.file> at request time.
     //
