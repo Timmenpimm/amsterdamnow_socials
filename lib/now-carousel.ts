@@ -30,6 +30,12 @@ export interface NowFamilyStep {
   min: number;
   /** Maximum number of slides this step produces. */
   max: number;
+  /**
+   * Which family's manifest entry supplies the HTML for this step. Defaults
+   * to the plan's own family; the lijstje carousel uses it to reuse the gids
+   * item slide, exactly as the design board does.
+   */
+  templateFamily?: NowTemplateFamily;
 }
 
 export interface NowFamilyPlan {
@@ -39,6 +45,12 @@ export interface NowFamilyPlan {
   /** What this carousel is for — also fed to the model. */
   purpose: string;
   steps: NowFamilyStep[];
+  /**
+   * Superseded by the current design set. Existing carousels keep rendering,
+   * editing and publishing; the family is simply no longer offered when
+   * creating something new.
+   */
+  retired?: boolean;
 }
 
 /**
@@ -52,6 +64,7 @@ export const NOW_FAMILY_PLANS: readonly NowFamilyPlan[] = [
     label: "Hotspot",
     purpose:
       "Eén nieuwe plek (restaurant, winkel, bar) uitgelicht: cover, statement, een paar detailslides en een afsluiter.",
+    retired: true,
     steps: [
       { slideType: "cover", min: 1, max: 1 },
       { slideType: "statement", min: 1, max: 1 },
@@ -60,14 +73,15 @@ export const NOW_FAMILY_PLANS: readonly NowFamilyPlan[] = [
     ],
   },
   {
+    // Het ontwerpbord "Carousel - Templates" vervangt de oude lijstje-opzet
+    // (eigen cover/item/cta) door een wordmark-cover met de gids-item-slide.
     family: "lijstje",
     label: "Lijstje",
     purpose:
-      "Genummerde ranglijst ('de 10 beste …'): cover met het aantal, één slide per plek, afsluiter.",
+      "Genummerde ranglijst ('de beste hotspots van juli'): wordmark-cover met de editietitel, daarna één genummerde slide per plek.",
     steps: [
-      { slideType: "cover", min: 1, max: 1 },
-      { slideType: "item", min: 3, max: 10 },
-      { slideType: "cta", min: 1, max: 1 },
+      { slideType: "editie-cover", min: 1, max: 1 },
+      { slideType: "item", min: 3, max: 10, templateFamily: "gids" },
     ],
   },
   {
@@ -98,6 +112,7 @@ export const NOW_FAMILY_PLANS: readonly NowFamilyPlan[] = [
     label: "Event (stories)",
     purpose:
       "Instagram Stories over één evenement, vier frames op 1080x1920: hook, reden, praktisch en een frame met ruimte voor de linksticker.",
+    retired: true,
     steps: [
       { slideType: "hook", min: 1, max: 1 },
       { slideType: "reason", min: 1, max: 1 },
@@ -133,6 +148,26 @@ export function isNowTemplateId(templateId: string): boolean {
   return parseNowTemplateId(templateId) !== null;
 }
 
+/** The families still offered when creating a new carousel. */
+export function selectableNowFamilyPlans(): NowFamilyPlan[] {
+  return NOW_FAMILY_PLANS.filter((plan) => !plan.retired);
+}
+
+/**
+ * Which family's template renders this slide. A step may borrow another
+ * family's slide (lijstje reuses the gids item), in which case the slide
+ * carries that family; older slides without one use the carousel's family.
+ */
+export function slideTemplateFamily(
+  carouselFamily: NowTemplateFamily,
+  slide: { family?: string }
+): NowTemplateFamily {
+  const borrowed = slide.family;
+  if (!borrowed) return carouselFamily;
+  const known = NOW_FAMILY_PLANS.find((plan) => plan.family === borrowed);
+  return known ? known.family : carouselFamily;
+}
+
 export function getNowFamilyPlan(family: NowTemplateFamily): NowFamilyPlan {
   const plan = NOW_FAMILY_PLANS.find((p) => p.family === family);
   if (!plan) {
@@ -163,7 +198,10 @@ export function buildNowDraftSchema(family: NowTemplateFamily) {
 
   for (const step of plan.steps) {
     const fields: Record<string, z.ZodTypeAny> = {};
-    for (const placeholder of textPlaceholders(family, step.slideType)) {
+    for (const placeholder of textPlaceholders(
+      step.templateFamily ?? family,
+      step.slideType
+    )) {
       fields[placeholder.name] = z
         .string()
         .max(400)
@@ -190,12 +228,15 @@ export interface NowStoredSlide {
   index: number;
   slideType: NowSlideType;
   values: Record<string, string>;
+  /** Set only when the slide borrows another family's template. */
+  family?: NowTemplateFamily;
 }
 
 export const nowStoredSlideSchema = z.object({
   index: z.number().int().min(0),
   slideType: z.string().min(1),
   values: z.record(z.string(), z.string()),
+  family: z.string().min(1).optional(),
 });
 
 export const nowStoredSlidesSchema = z.array(nowStoredSlideSchema).min(1);
@@ -235,7 +276,8 @@ export function buildNowSlides(
     }
 
     entries.forEach((textValues, positionInStep) => {
-      const spec = getNowTemplateSpec(family, step.slideType);
+      const templateFamily = step.templateFamily ?? family;
+      const spec = getNowTemplateSpec(templateFamily, step.slideType);
       const values: Record<string, string> = {};
 
       for (const placeholder of spec.placeholders) {
@@ -255,7 +297,12 @@ export function buildNowSlides(
         values[placeholder.name] = (textValues[placeholder.name] ?? "").trim();
       }
 
-      slides.push({ index: slides.length, slideType: step.slideType, values });
+      slides.push({
+        index: slides.length,
+        slideType: step.slideType,
+        values,
+        ...(step.templateFamily ? { family: step.templateFamily } : {}),
+      });
     });
   }
 
@@ -283,25 +330,32 @@ export function validateNowSlides(
   // Deliberately loose: checking whether `slideType` is one this family knows
   // is exactly what this function is for, so it must accept unvalidated input
   // straight from the database.
-  slides: readonly { index: number; slideType: string; values: Record<string, string> }[]
+  slides: readonly {
+    index: number;
+    slideType: string;
+    values: Record<string, string>;
+    family?: string;
+  }[]
 ): string[] {
   const problems: string[] = [];
-  const knownTypes = new Set<string>(
-    NOW_TEMPLATE_MANIFEST.filter((s) => s.family === family).map(
-      (s) => s.slideType
-    )
-  );
 
   slides.forEach((slide, i) => {
+    const resolved = slideTemplateFamily(family, slide);
+    const knownTypes = new Set<string>(
+      NOW_TEMPLATE_MANIFEST.filter((s) => s.family === resolved).map(
+        (s) => s.slideType
+      )
+    );
+
     if (!knownTypes.has(slide.slideType)) {
       problems.push(
-        `Slide ${i + 1}: onbekend slidetype "${slide.slideType}" voor familie ${family}.`
+        `Slide ${i + 1}: onbekend slidetype "${slide.slideType}" voor familie ${resolved}.`
       );
       return;
     }
 
     // Narrowed by the knownTypes check above.
-    const spec = getNowTemplateSpec(family, slide.slideType as NowSlideType);
+    const spec = getNowTemplateSpec(resolved, slide.slideType as NowSlideType);
     const declared = new Set(spec.placeholders.map((p) => p.name));
 
     for (const placeholder of spec.placeholders) {

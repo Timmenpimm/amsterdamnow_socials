@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { resolveApiUserId } from "@/lib/api-auth";
-import { NOW_FAMILY_PLANS, nowTemplateId } from "@/lib/now-carousel";
+import { nowTemplateId, selectableNowFamilyPlans } from "@/lib/now-carousel";
 import { getNowTemplateSpec } from "@/templates/now/manifest";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const families = NOW_FAMILY_PLANS.map((plan) => ({
+  const families = selectableNowFamilyPlans().map((plan) => ({
     family: plan.family,
     templateId: nowTemplateId(plan.family),
     label: plan.label,
@@ -27,7 +27,10 @@ export async function GET(request: Request) {
     minSlides: plan.steps.reduce((total, step) => total + step.min, 0),
     maxSlides: plan.steps.reduce((total, step) => total + step.max, 0),
     steps: plan.steps.map((step) => {
-      const spec = getNowTemplateSpec(plan.family, step.slideType);
+      const spec = getNowTemplateSpec(
+        step.templateFamily ?? plan.family,
+        step.slideType
+      );
       return {
         slideType: step.slideType,
         min: step.min,

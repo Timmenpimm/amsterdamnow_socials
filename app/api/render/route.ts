@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import {
   nowStoredSlidesSchema,
   parseNowTemplateId,
+  slideTemplateFamily,
   validateNowSlides,
   type NowStoredSlide,
 } from "@/lib/now-carousel";
@@ -91,7 +92,9 @@ async function renderNowCarouselResponse(
   }
 
   const toInput = (slide: NowStoredSlide): RenderNowSlideInput => ({
-    family,
+    // A slide may borrow another family's template (lijstje reuses the gids
+    // item), so resolve per slide instead of assuming the carousel's family.
+    family: slideTemplateFamily(family, slide),
     slideType: slide.slideType,
     values: slide.values,
   });
