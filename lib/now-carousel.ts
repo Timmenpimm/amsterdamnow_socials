@@ -78,9 +78,9 @@ export const NOW_FAMILY_PLANS: readonly NowFamilyPlan[] = [
     family: "lijstje",
     label: "Lijstje",
     purpose:
-      "Genummerde ranglijst ('de beste hotspots van juli'): wordmark-cover met de editietitel, daarna één genummerde slide per plek.",
+      "Genummerde ranglijst ('de 10 beste …'): cover met het aantal en de kop, daarna één genummerde slide per plek.",
     steps: [
-      { slideType: "editie-cover", min: 1, max: 1 },
+      { slideType: "cover", min: 1, max: 1 },
       { slideType: "item", min: 3, max: 10, templateFamily: "gids" },
     ],
   },
@@ -182,7 +182,7 @@ export function textPlaceholders(
   slideType: NowSlideType
 ): NowPlaceholderSpec[] {
   return getNowTemplateSpec(family, slideType).placeholders.filter(
-    (p) => !p.isUrl && !p.enumValues && !p.zeroPadTo
+    (p) => !p.isUrl && !p.enumValues && !p.zeroPadTo && !p.autoCount
   );
 }
 
@@ -261,6 +261,12 @@ export function buildNowSlides(
   const plan = getNowFamilyPlan(family);
   const slides: NowStoredSlide[] = [];
 
+  // Hoeveel items levert de herhaalde stap? De cover noemt dat aantal, dus
+  // het wordt geteld en niet door het model geschreven.
+  const repeatedStep = plan.steps.find((step) => step.max > 1);
+  const repeatedEntry = repeatedStep ? draft[repeatedStep.slideType] : undefined;
+  const repeatedCount = Array.isArray(repeatedEntry) ? repeatedEntry.length : 0;
+
   for (const step of plan.steps) {
     const entry = draft[step.slideType];
     const entries: Record<string, string>[] = Array.isArray(entry)
@@ -288,6 +294,10 @@ export function buildNowSlides(
         if (placeholder.enumValues) {
           values[placeholder.name] =
             placeholder.enumValues[positionInStep % placeholder.enumValues.length];
+          continue;
+        }
+        if (placeholder.autoCount) {
+          values[placeholder.name] = String(repeatedCount);
           continue;
         }
         if (placeholder.zeroPadTo) {

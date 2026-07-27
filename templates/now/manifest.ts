@@ -48,6 +48,12 @@ export interface NowPlaceholderSpec {
   /** Numeric value must be zero-padded to this many digits (e.g. item_nummer -> "01"). */
   zeroPadTo?: number;
   /**
+   * Filled with the number of slides the carousel's repeated step produces
+   * (the lijstje cover states how many entries follow), so the count can
+   * never disagree with the actual list.
+   */
+  autoCount?: boolean;
+  /**
    * The design contract lets the editor place a literal <br> in this token to
    * control where the line breaks (see docs/design/social-templates/
    * CAROUSEL_PLACEHOLDERS.md). The value is still HTML-escaped; only <br> is
@@ -138,7 +144,11 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
     file: 'lijstje_cover.html',
     dimensions: LIJSTJE_DIMENSIONS,
     placeholders: [
-      { name: 'aantal_items', description: 'Huge black number: how many items the list has' },
+      {
+        name: 'aantal_items',
+        description: 'Huge black number: how many items the list has',
+        autoCount: true,
+      },
       { name: 'categorie', description: 'Vertical red uppercase category label (writing-mode: vertical-rl)' },
       { name: 'kop', description: 'Black headline, max 4 words' },
     ],
