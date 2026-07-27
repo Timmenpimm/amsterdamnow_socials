@@ -29,6 +29,10 @@ const inlineArticleSchema = z.object({
   contentHtml: z.string().min(1).max(100_000),
   excerpt: z.string().optional(),
   imageUrl: z.string().url().optional(),
+  // De eerste URL is het uitgelichte beeld. De resterende beelden worden
+  // uitsluitend door NOW-templates gebruikt voor detail-/itemslides; de
+  // generieke satori-generator kent alleen imageUrl.
+  imageUrls: z.array(z.string().url()).max(20).optional(),
   categories: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
 });
@@ -130,6 +134,9 @@ export async function POST(request: Request) {
     // images later in the render pipeline.
     imageUrl: string | null;
   };
+  // Wordt niet in het bestaande Article-model opgeslagen: dit is de
+  // volgorde van de actuele WordPress-media bij deze ene generatie.
+  let itemImageUrls: string[] | undefined;
 
   if ("articleId" in parsed.data) {
     const { articleId } = parsed.data;
@@ -148,6 +155,9 @@ export async function POST(request: Request) {
     article = found;
   } else {
     const input = parsed.data.article;
+    const imageUrls = [...new Set(input.imageUrls ?? [])];
+    const coverImageUrl = input.imageUrl ?? imageUrls[0] ?? null;
+    itemImageUrls = imageUrls.filter((url) => url !== coverImageUrl);
 
     // Inline articles hang off the caller's WordPressConnection. External
     // callers may not have configured one yet, so fall back to a stub row
@@ -182,7 +192,7 @@ export async function POST(request: Request) {
         title: input.title,
         content: input.contentHtml,
         excerpt: input.excerpt ?? null,
-        imageUrl: input.imageUrl ?? null,
+        imageUrl: coverImageUrl,
         categories: input.categories ?? [],
         tags: input.tags ?? [],
       },
@@ -192,7 +202,7 @@ export async function POST(request: Request) {
         title: input.title,
         content: input.contentHtml,
         excerpt: input.excerpt ?? null,
-        imageUrl: input.imageUrl ?? null,
+        imageUrl: coverImageUrl,
         categories: input.categories ?? [],
         tags: input.tags ?? [],
       },
@@ -217,7 +227,7 @@ export async function POST(request: Request) {
             excerpt: article.excerpt,
           },
           nowFamily,
-          { imageUrl: article.imageUrl }
+          { imageUrl: article.imageUrl, itemImageUrls }
         )
       : await generateCarousel({
           title: article.title,
