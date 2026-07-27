@@ -8,6 +8,7 @@ import { verifyRenderToken } from "@/lib/public-render";
 import {
   nowStoredSlidesSchema,
   parseNowTemplateId,
+  slideTemplateFamily,
   validateNowSlides,
 } from "@/lib/now-carousel";
 import { renderSlide } from "@/lib/renderer";
@@ -194,7 +195,7 @@ async function renderNowSlideAsJpeg(
 
   try {
     const png = await renderNowSlide({
-      family,
+      family: slideTemplateFamily(family, slide),
       slideType: slide.slideType as NowSlideType,
       values: slide.values,
     });

@@ -36,7 +36,7 @@ function describeStep(
   step: NowFamilyStep,
   position: number
 ): string {
-  const placeholders = textPlaceholders(family, step.slideType);
+  const placeholders = textPlaceholders(step.templateFamily ?? family, step.slideType);
   const header = `${position}. "${step.slideType}" — ${describeRange(step)}`;
 
   if (placeholders.length === 0) {
