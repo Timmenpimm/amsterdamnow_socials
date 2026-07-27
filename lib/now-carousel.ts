@@ -294,7 +294,7 @@ export function buildNowSlides(
           values[placeholder.name] = String(positionInStep + 1);
           continue;
         }
-        values[placeholder.name] = (textValues[placeholder.name] ?? "").trim();
+        values[placeholder.name] = cleanText(textValues[placeholder.name] ?? "");
       }
 
       slides.push({
@@ -307,6 +307,18 @@ export function buildNowSlides(
   }
 
   return slides;
+}
+
+/**
+ * Trims a model-written value and drops <br> tags at the start or end. The
+ * model tends to append one to every field whose description mentions that
+ * <br> is allowed, which renders as an empty line under the text.
+ */
+function cleanText(value: string): string {
+  return value
+    .replace(/^(?:\s*<br\s*\/?>)+/gi, "")
+    .replace(/(?:<br\s*\/?>\s*)+$/gi, "")
+    .trim();
 }
 
 function pickImage(

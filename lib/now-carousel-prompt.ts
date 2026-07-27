@@ -80,7 +80,7 @@ ${steps}
 
 Regels voor de tekstvelden:
 - Houd je aan de lengtes die in de beschrijving van een veld staan. Staat er "max ~110 tekens", dan is dat een harde grens; te lange tekst loopt uit de vormgeving.
-- Elk veld is platte tekst. Geen HTML, geen markdown, geen emoji, geen aanhalingstekens rond het hele veld. De enige uitzondering is <br> in de velden die hierboven expliciet als zodanig zijn gemarkeerd.
+- Elk veld is platte tekst. Geen HTML, geen markdown, geen emoji, geen aanhalingstekens rond het hele veld. De enige uitzondering is <br> in de velden die hierboven expliciet als zodanig zijn gemarkeerd — en gebruik die alleen midden in een tekst waar je de regel echt wilt breken. Nooit aan het begin of eind van een veld; dat levert een lege regel op in het ontwerp.
 - Velden die om HOOFDLETTERS vragen (kicker, categorie, datum, label) lever je ook echt in hoofdletters aan.
 - Verzin nooit beeld-URL's of bestandsnamen. Foto's worden door de applicatie ingevuld; er zit geen enkel beeldveld in wat jij aanlevert.
 - Verzin geen feiten. Staat een prijs, tijd of adres niet in het artikel, schrijf dan wat er wél bekend is (bijvoorbeeld "Zie de site voor tijden") in plaats van iets te bedenken.
