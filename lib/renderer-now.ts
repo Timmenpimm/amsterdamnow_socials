@@ -272,17 +272,35 @@ async function renderSpec(
   }
 }
 
-/** True for the errors a browser that died mid-render throws. */
-function isDeadBrowserError(error: unknown): boolean {
+/**
+ * True for the transient failures emitted when Chromium becomes unusable
+ * mid-render. Vercel does not always report a hard disconnect: a dying
+ * browser can instead reject only the screenshot protocol call.
+ */
+function isRecoverableBrowserError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /has been closed|Target closed|browser has disconnected|Connection closed/i.test(
+  return /has been closed|Target closed|browser has disconnected|Connection closed|Unable to capture screenshot/i.test(
     message
   );
 }
 
 /**
- * Renders once, and on a dead-browser error drops the cached handle and
- * retries with a fresh launch. The container can be frozen between (or even
+ * Remove the failed browser from the process cache and ask Chromium to exit.
+ * Closing matters on Vercel: otherwise a half-dead process/profile remains in
+ * /tmp, leaving too little space for the fresh Chromium started by the retry.
+ */
+async function discardBrowser(browser: Browser): Promise<void> {
+  const cached = browserPromise;
+  browserPromise = null;
+  const cachedBrowser = await cached?.catch(() => null);
+  if (cachedBrowser === browser) {
+    await browser.close().catch(() => undefined);
+  }
+}
+
+/**
+ * Renders once, and on a transient Chromium error disposes the cached browser
+ * and retries with a fresh one. The container can be frozen between (or even
  * during) invocations, so this is a normal condition on Vercel, not an
  * exceptional one.
  */
@@ -294,8 +312,8 @@ async function renderWithRetry(
   try {
     return await renderSpec(browser, spec, values);
   } catch (error) {
-    if (!isDeadBrowserError(error)) throw error;
-    browserPromise = null;
+    if (!isRecoverableBrowserError(error)) throw error;
+    await discardBrowser(browser);
     const fresh = await getBrowser();
     return renderSpec(fresh, spec, values);
   }
