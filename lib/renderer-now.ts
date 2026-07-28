@@ -32,6 +32,19 @@ function isServerlessRuntime(): boolean {
 }
 
 /**
+ * Of elke render zijn eigen browser krijgt in plaats van de gecachete. Staat
+ * standaard aan op serverless (zie renderWithRetry voor het waarom) en is met
+ * NOW_RENDERER_BROWSER_PER_RENDER=1/0 te forceren — zo is het productiepad
+ * ook lokaal te draaien, met de gewone Chromium van playwright.
+ */
+function usesPerRenderBrowser(): boolean {
+  const override = process.env.NOW_RENDERER_BROWSER_PER_RENDER;
+  if (override === '1') return true;
+  if (override === '0') return false;
+  return isServerlessRuntime();
+}
+
+/**
  * Thrown when no Chromium can be started at all (missing binary, no
  * executable path, sandbox refused). Callers map this to 503 "not available
  * in this environment" instead of a generic 500 — see app/api/render/route.ts.
@@ -90,10 +103,13 @@ export interface RenderNowSlideInput {
   values: Record<string, string>;
 }
 
-// Lazy + cached per process: launching Chromium is the expensive part, so we
-// keep one Browser instance alive across renderNowSlide/renderNowCarousel
-// calls. Each render still gets its own throwaway BrowserContext, which is
-// what actually gets closed in the try/finally blocks below.
+// Lazy + cached per process, alleen lokaal: launching Chromium is the
+// expensive part, so we keep one Browser instance alive across
+// renderNowSlide/renderNowCarousel calls. Each render still gets its own
+// throwaway BrowserContext, which is what actually gets closed in the
+// try/finally blocks below. Op Vercel wordt deze cache niet gebruikt — zie
+// renderWithRetry: daar is een browser die een bevriezing moet overleven
+// juist de oorzaak van de storing.
 let browserPromise: Promise<Browser> | null = null;
 
 /**
@@ -304,22 +320,16 @@ async function renderSpec(
   const html = applyReplacements(rawHtml, buildReplacements(spec, values));
 
   const context = await browser.newContext({ viewport: spec.dimensions, deviceScaleFactor: 1 });
-  let rendered = false;
   try {
     const page = await context.newPage();
     await page.setContent(html, { waitUntil: 'load' });
     await page.evaluate(() => document.fonts.ready);
-    const png = await page.screenshot({ type: 'png' });
-    rendered = true;
-    return png;
+    return await page.screenshot({ type: 'png' });
   } finally {
     // A dying browser makes context.close() throw too; swallowing that keeps
-    // the original (more informative) error on its way up.
+    // the original (more informative) error on its way up. Disposing of the
+    // browser itself is the caller's job — it knows whether it owns it.
     await context.close().catch(() => undefined);
-    // A failed render means the browser may be half-dead: dispose of it here
-    // so no orphaned Chromium process — and no orphaned /tmp profile — is left
-    // behind, whether or not the caller decides to retry.
-    if (!rendered) await discardBrowser(browser);
   }
 }
 
@@ -356,15 +366,28 @@ async function discardBrowser(browser: Browser): Promise<void> {
 }
 
 /**
- * Renders once, and on a transient Chromium error disposes the cached browser
- * and retries with a fresh one. The container can be frozen between (or even
- * during) invocations, so this is a normal condition on Vercel, not an
- * exceptional one.
+ * Rendert één slide, met één herkansing op een verse Chromium.
+ *
+ * Serverless is een eigen geval. Vercel bevriest de container tussen
+ * aanroepen en Chromium overleeft dat niet, terwijl `isConnected()` nog
+ * gewoon "verbonden" meldt — elke hergebruikte browser is daar dus een gok.
+ * Verliezen we die gok, dan is het proces al hard weggehaald en blijft zijn
+ * profielmap in /tmp staan; genoeg van die restanten en er is geen ruimte
+ * meer voor de shared-memory-bestanden van de volgende Chromium. Vandaar:
+ * op Vercel één browser per render, binnen dezelfde invocatie netjes
+ * gesloten. Dat kost een seconde opstarten en maakt zowel de stale handle
+ * als het /tmp-lek onmogelijk. Lokaal blijft de proces-cache staan — daar
+ * wordt niets bevroren en is de winst reëel.
  */
 async function renderWithRetry(
   spec: NowTemplateSpec,
   values: Record<string, string>
 ): Promise<Buffer> {
+  if (usesPerRenderBrowser()) {
+    const [png] = await renderBatchOnOwnBrowser([{ spec, values }]);
+    return png;
+  }
+
   const browser = await getBrowser();
   try {
     return await renderSpec(browser, spec, values);
@@ -376,18 +399,70 @@ async function renderWithRetry(
   }
 }
 
+/**
+ * Rendert een reeks slides op een eigen browser, die hoe dan ook weer
+ * dichtgaat — een schone close is ook wat Chromium zijn profielmap laat
+ * opruimen. Binnen één invocatie wordt er niets bevroren, dus de hele reeks
+ * mag dezelfde browser delen; sterft hij onderweg alsnog, dan gaat die ene
+ * slide door op een verse.
+ */
+async function renderBatchOnOwnBrowser(
+  jobs: { spec: NowTemplateSpec; values: Record<string, string> }[]
+): Promise<Buffer[]> {
+  let browser = await launchOwnBrowser();
+  try {
+    const results: Buffer[] = [];
+    for (const { spec, values } of jobs) {
+      try {
+        results.push(await renderSpec(browser, spec, values));
+      } catch (error) {
+        if (!isRecoverableBrowserError(error)) throw error;
+        await browser.close().catch(() => undefined);
+        browser = await launchOwnBrowser();
+        results.push(await renderSpec(browser, spec, values));
+      }
+    }
+    return results;
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}
+
+/** Zelfde foutafhandeling als de gecachete variant, zonder de cache. */
+async function launchOwnBrowser(): Promise<Browser> {
+  try {
+    return await launchBrowser();
+  } catch (error) {
+    throw new NowRendererUnavailableError(
+      `Could not launch Chromium for the NOW renderer (${
+        isServerlessRuntime() ? 'serverless' : 'local'
+      } mode): ${error instanceof Error ? error.message : String(error)}`,
+      error
+    );
+  }
+}
+
 export async function renderNowSlide(input: RenderNowSlideInput): Promise<Buffer> {
   const spec = getNowTemplateSpec(input.family, input.slideType);
   return renderWithRetry(spec, input.values);
 }
 
 export async function renderNowCarousel(slides: RenderNowSlideInput[]): Promise<Buffer[]> {
+  const jobs = slides.map((slide) => ({
+    spec: getNowTemplateSpec(slide.family, slide.slideType),
+    values: slide.values,
+  }));
+
+  // Serverless: één browser voor de hele reeks in plaats van één per slide,
+  // wat een seconde opstarten per slide scheelt zonder de browser over
+  // invocaties heen te tillen.
+  if (usesPerRenderBrowser()) return renderBatchOnOwnBrowser(jobs);
+
   const results: Buffer[] = [];
-  for (const slide of slides) {
-    const spec = getNowTemplateSpec(slide.family, slide.slideType);
+  for (const job of jobs) {
     // Per slide, so a browser that dies halfway through a long carousel
     // costs one relaunch instead of the whole batch.
-    results.push(await renderWithRetry(spec, slide.values));
+    results.push(await renderWithRetry(job.spec, job.values));
   }
   return results;
 }
