@@ -2,11 +2,16 @@ import { z } from "zod";
 
 import { MAX_CAROUSEL_SLIDES } from "@/lib/instagram-limits";
 import {
+  createItemImageAllocator,
+  type NowItemImage,
+} from "@/lib/now-item-images";
+import {
   NOW_TEMPLATE_MANIFEST,
   getNowTemplateSpec,
   type NowPlaceholderSpec,
   type NowSlideType,
   type NowTemplateFamily,
+  type NowTemplateSpec,
 } from "@/templates/now/manifest";
 
 /**
@@ -290,7 +295,22 @@ export interface NowImageSources {
   cover?: string;
   /** Used per repeated slide, in order; falls back to `cover` when absent. */
   items?: string[];
+  /**
+   * Naam van de zaak → foto van díe zaak, als de aanroeper de koppeling kent
+   * (de artikel-tool haalt hem uit de opgeslagen lijststructuur). Zonder dit
+   * veld gaan de foto's op volgorde de slides in, en dat gaat mis zodra het
+   * model niet de eerste items van het artikel kiest maar de sterkste. Wordt
+   * alleen gebruikt op slides die een naamtoken hebben (item_naam).
+   */
+  byName?: NowItemImage[];
 }
+
+/**
+ * Het token waarin de naam van de zaak staat, op de itemslides van lijstje en
+ * gids. Staat dit token in het template, dan bepaalt de naam welke foto de
+ * slide krijgt; anders blijft het de volgorde.
+ */
+const ITEM_NAME_TOKEN = "item_naam";
 
 /**
  * Turns a model draft into manifest-complete slides: every placeholder the
@@ -320,8 +340,20 @@ export function buildNowSlides(
 
   // Loopt door over alle beeldslots na de cover, zodat elk slot het volgende
   // artikelbeeld krijgt in plaats van dat slides met dezelfde positie binnen
-  // hun stap dezelfde foto delen.
+  // hun stap dezelfde foto delen. Alleen in gebruik zolang de aanroeper geen
+  // naam→foto-koppeling meestuurt.
   let imageCursor = 0;
+
+  // Eerst de slides uitplannen, dan pas vullen. Dat is nodig omdat de
+  // naam→foto-toewijzing alle slides tegelijk moet zien: kende ze alleen de
+  // slide waar ze mee bezig is, dan zou een slide zonder match de foto
+  // wegsnoepen die een latere slide juist bij naam had kunnen claimen.
+  const planned: {
+    step: NowFamilyStep;
+    spec: NowTemplateSpec;
+    textValues: Record<string, string>;
+    positionInStep: number;
+  }[] = [];
 
   for (const step of plan.steps) {
     const entry = draft[step.slideType];
@@ -338,55 +370,118 @@ export function buildNowSlides(
     }
 
     entries.forEach((textValues, positionInStep) => {
-      const templateFamily = step.templateFamily ?? family;
-      const spec = getNowTemplateSpec(templateFamily, step.slideType);
-      const values: Record<string, string> = {};
-
-      for (const placeholder of spec.placeholders) {
-        if (placeholder.isUrl) {
-          values[placeholder.name] =
-            slides.length === 0
-              ? (images.cover ?? "")
-              : pickItemImage(images, imageCursor++);
-          continue;
-        }
-        if (placeholder.enumValues) {
-          values[placeholder.name] =
-            placeholder.enumValues[positionInStep % placeholder.enumValues.length];
-          continue;
-        }
-        if (placeholder.autoCount) {
-          values[placeholder.name] = String(repeatedCount);
-          continue;
-        }
-        if (placeholder.zeroPadTo) {
-          values[placeholder.name] = String(positionInStep + 1);
-          continue;
-        }
-        // De coverkop is de artikeltitel zelf, niet iets wat het model
-        // bedenkt: zo staat er op slide 1 precies wat er boven het artikel
-        // staat. De redacteur kan hem daarna in de editor inkorten.
-        if (placeholder.fromArticleTitle) {
-          // Valt terug op de modelwaarde als er geen titel is meegegeven, zodat
-          // een lege kop nooit ongemerkt op slide 1 belandt.
-          values[placeholder.name] = cleanNowText(
-            articleTitle || textValues[placeholder.name] || ""
-          );
-          continue;
-        }
-        values[placeholder.name] = cleanNowText(textValues[placeholder.name] ?? "");
-      }
-
-      slides.push({
-        index: slides.length,
-        slideType: step.slideType,
-        values,
-        ...(step.templateFamily ? { family: step.templateFamily } : {}),
+      planned.push({
+        step,
+        spec: getNowTemplateSpec(step.templateFamily ?? family, step.slideType),
+        textValues,
+        positionInStep,
       });
     });
   }
 
+  // Kent de aanroeper wél welke foto bij welke zaak hoort, dan wijst de
+  // allocator toe op naam in plaats van op volgorde — met dezelfde
+  // volgorde-pool als terugval. Zonder byName verandert er niets aan het
+  // bestaande gedrag, voor geen enkele familie.
+  //
+  // De namenlijst loopt exact synchroon met de vraag-om-een-foto hieronder:
+  // dezelfde slides in dezelfde volgorde, slide 1 overgeslagen (die krijgt de
+  // cover) en één slot per isUrl-token. Een slide zonder naamtoken levert een
+  // lege naam.
+  //
+  // Levert géén enkele slide een naam, dan blijft de allocator uit en houdt
+  // deze carousel het oude volgorde-gedrag tot en met de terugval — hotspot,
+  // agenda en event hebben geen item_naam en mogen niets van deze koppeling
+  // merken, ook niet als de aanroeper toch een byName-lijst meestuurt.
+  const slotNames = imageSlotNames(planned);
+  const allocator =
+    (images.byName?.length ?? 0) > 0 && slotNames.some(Boolean)
+      ? createItemImageAllocator(images, slotNames)
+      : null;
+
+  planned.forEach(({ step, spec, textValues, positionInStep }, slideIndex) => {
+    const values: Record<string, string> = {};
+
+    for (const placeholder of spec.placeholders) {
+      if (placeholder.isUrl) {
+        if (slideIndex === 0) {
+          values[placeholder.name] = images.cover ?? "";
+        } else if (allocator) {
+          values[placeholder.name] = allocator.next();
+        } else {
+          values[placeholder.name] = pickItemImage(images, imageCursor++);
+        }
+        continue;
+      }
+      if (placeholder.enumValues) {
+        values[placeholder.name] =
+          placeholder.enumValues[positionInStep % placeholder.enumValues.length];
+        continue;
+      }
+      if (placeholder.autoCount) {
+        values[placeholder.name] = String(repeatedCount);
+        continue;
+      }
+      if (placeholder.zeroPadTo) {
+        values[placeholder.name] = String(positionInStep + 1);
+        continue;
+      }
+      // De coverkop is de artikeltitel zelf, niet iets wat het model
+      // bedenkt: zo staat er op slide 1 precies wat er boven het artikel
+      // staat. De redacteur kan hem daarna in de editor inkorten.
+      if (placeholder.fromArticleTitle) {
+        // Valt terug op de modelwaarde als er geen titel is meegegeven, zodat
+        // een lege kop nooit ongemerkt op slide 1 belandt.
+        values[placeholder.name] = cleanNowText(
+          articleTitle || textValues[placeholder.name] || ""
+        );
+        continue;
+      }
+      values[placeholder.name] = cleanNowText(textValues[placeholder.name] ?? "");
+    }
+
+    slides.push({
+      index: slides.length,
+      slideType: step.slideType,
+      values,
+      ...(step.templateFamily ? { family: step.templateFamily } : {}),
+    });
+  });
+
   return slides;
+}
+
+/**
+ * De naam die bij elk beeldslot na de cover hoort, in de volgorde waarin
+ * buildNowSlides ze opvraagt. Slide 1 valt af (die krijgt de coverfoto), en een
+ * slide zonder naamtoken of met een tweede beeldslot levert een lege naam: dat
+ * slot wordt dan gewoon op volgorde gevuld.
+ */
+function imageSlotNames(
+  planned: readonly { spec: NowTemplateSpec; textValues: Record<string, string> }[]
+): string[] {
+  const names: string[] = [];
+
+  planned.forEach(({ spec, textValues }, slideIndex) => {
+    if (slideIndex === 0) return;
+    // Uit textValues en niet uit de al gevulde `values`: isUrl staat in het
+    // manifest vóór item_naam, dus daar zou de naam nog niet in staan. De naam
+    // is hier ongepoetst; de matcher negeert HTML en leestekens sowieso.
+    const name = spec.placeholders.some((p) => p.name === ITEM_NAME_TOKEN)
+      ? (textValues[ITEM_NAME_TOKEN] ?? "")
+      : "";
+
+    let first = true;
+    for (const placeholder of spec.placeholders) {
+      if (!placeholder.isUrl) continue;
+      // Heeft een template meer dan één beeldslot, dan claimt alleen het eerste
+      // de foto van de zaak; de rest wordt op volgorde gevuld.
+      names.push(first ? name : "");
+      first = false;
+    }
+  });
+
+  return names;
 }
 
 /**

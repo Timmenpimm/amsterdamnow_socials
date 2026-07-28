@@ -220,7 +220,8 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
       { name: 'item_image_url', description: 'Full-bleed item photo', isUrl: true },
       {
         name: 'item_naam',
-        description: 'Place name, centered headline, at most 2 lines — the name only, no tagline',
+        description:
+          'Place name, centered headline, at most 2 lines — the name only, no tagline. Copy the name exactly as the article writes it: same spelling, same accents, same word order. Do not shorten, translate or rephrase it — the application matches this name against the article to put the right photo on this slide',
       },
       {
         name: 'item_wijk',
@@ -490,7 +491,7 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
       {
         name: 'item_naam',
         description:
-          'Item name, centered headline, at most 2 lines — the name only, no tagline; <br> allowed',
+          'Item name, centered headline, at most 2 lines — the name only, no tagline; <br> allowed. Copy the name exactly as the article writes it: same spelling, same accents, same word order. Do not shorten, translate or rephrase it — the application matches this name against the article to put the right photo on this slide',
         allowsLineBreak: true,
       },
       {
