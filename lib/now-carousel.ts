@@ -454,6 +454,10 @@ export function validateNowSlides(
     const declared = new Set(spec.placeholders.map((p) => p.name));
 
     for (const placeholder of spec.placeholders) {
+      // Optional tokens postdate the carousels already in the database; a slide
+      // written before the token existed is still renderable (renderer-now.ts
+      // substitutes an empty string), so its absence is not a problem.
+      if (placeholder.optional) continue;
       if (typeof slide.values[placeholder.name] !== "string") {
         problems.push(
           `Slide ${i + 1} (${slide.slideType}): waarde voor "${placeholder.name}" ontbreekt.`

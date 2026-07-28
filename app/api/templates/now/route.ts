@@ -44,6 +44,7 @@ export async function GET(request: Request) {
           zeroPadTo: placeholder.zeroPadTo ?? null,
           autoCount: placeholder.autoCount ?? false,
           allowsLineBreak: placeholder.allowsLineBreak ?? false,
+          optional: placeholder.optional ?? false,
         })),
       };
     }),

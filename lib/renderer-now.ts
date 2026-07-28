@@ -276,6 +276,7 @@ function padNumeric(value: string, length: number): string {
 
 function buildReplacements(spec: NowTemplateSpec, values: Record<string, string>): Map<string, string> {
   const missing = spec.placeholders
+    .filter((p) => !p.optional)
     .map((p) => p.name)
     .filter((name) => values[name] === undefined || values[name] === null);
 
@@ -288,7 +289,11 @@ function buildReplacements(spec: NowTemplateSpec, values: Record<string, string>
 
   const replacements = new Map<string, string>();
   for (const placeholder of spec.placeholders) {
-    let raw = values[placeholder.name];
+    // Optional tokens were added after carousels were already stored, so an
+    // older slide simply has no value for them. Substituting an empty string
+    // keeps applyReplacements' leftover guard happy and lets the template's
+    // `:empty{display:none}` rules drop the element entirely.
+    let raw = values[placeholder.name] ?? '';
 
     if (placeholder.enumValues && !placeholder.enumValues.includes(raw)) {
       throw new Error(
