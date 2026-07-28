@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile, rm, stat } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Browser } from 'playwright-core';
@@ -95,7 +96,48 @@ export interface RenderNowSlideInput {
 // what actually gets closed in the try/finally blocks below.
 let browserPromise: Promise<Browser> | null = null;
 
+/**
+ * Chromium writes its user-data directory to os.tmpdir()
+ * (playwright_chromiumdev_profile-*) and only removes it on a clean exit. A
+ * crashed or frozen browser leaves it behind, and once enough of them pile up
+ * the next Chromium has no room left for its shared-memory files ("Less than
+ * 64MB of free space in temporary directory for shared memory files") and dies
+ * on newPage/setContent/screenshot. Sweeping is a safety net for profiles that
+ * leaked before this process started — the browser we are about to launch owns
+ * a fresh directory.
+ */
+const PROFILE_PREFIX = 'playwright_chromiumdev_profile-';
+/** Only touch profiles that cannot belong to a render still in flight. */
+const PROFILE_MAX_AGE_MS = 5 * 60 * 1000;
+
+async function sweepOrphanedProfiles(): Promise<void> {
+  try {
+    const tmpDir = os.tmpdir();
+    const entries = await readdir(tmpDir);
+    const cutoff = Date.now() - PROFILE_MAX_AGE_MS;
+
+    await Promise.all(
+      entries
+        .filter((entry) => entry.startsWith(PROFILE_PREFIX))
+        .map(async (entry) => {
+          const dir = path.join(tmpDir, entry);
+          try {
+            const stats = await stat(dir);
+            if (!stats.isDirectory() || stats.mtimeMs > cutoff) return;
+            await rm(dir, { recursive: true, force: true });
+          } catch {
+            // Gone already, or not ours to delete — never block a render on it.
+          }
+        })
+    );
+  } catch {
+    // Cleanup is best-effort: a failing sweep must never fail the render.
+  }
+}
+
 async function launchBrowser(): Promise<Browser> {
+  await sweepOrphanedProfiles();
+
   if (isServerlessRuntime()) {
     // playwright is a devDependency and simply isn't there on Vercel.
     const [{ chromium }, sparticuz] = await Promise.all([
@@ -262,13 +304,22 @@ async function renderSpec(
   const html = applyReplacements(rawHtml, buildReplacements(spec, values));
 
   const context = await browser.newContext({ viewport: spec.dimensions, deviceScaleFactor: 1 });
+  let rendered = false;
   try {
     const page = await context.newPage();
     await page.setContent(html, { waitUntil: 'load' });
     await page.evaluate(() => document.fonts.ready);
-    return await page.screenshot({ type: 'png' });
+    const png = await page.screenshot({ type: 'png' });
+    rendered = true;
+    return png;
   } finally {
-    await context.close();
+    // A dying browser makes context.close() throw too; swallowing that keeps
+    // the original (more informative) error on its way up.
+    await context.close().catch(() => undefined);
+    // A failed render means the browser may be half-dead: dispose of it here
+    // so no orphaned Chromium process — and no orphaned /tmp profile — is left
+    // behind, whether or not the caller decides to retry.
+    if (!rendered) await discardBrowser(browser);
   }
 }
 
@@ -285,17 +336,23 @@ function isRecoverableBrowserError(error: unknown): boolean {
 }
 
 /**
- * Remove the failed browser from the process cache and ask Chromium to exit.
- * Closing matters on Vercel: otherwise a half-dead process/profile remains in
- * /tmp, leaving too little space for the fresh Chromium started by the retry.
+ * Ask Chromium to exit and drop it from the process cache. The close is
+ * unconditional: a crash fires the 'disconnected' handler, which has already
+ * emptied the cache, so guarding the close on "is this still the cached
+ * browser?" skipped it in exactly the case it exists for. Closing matters on
+ * Vercel: otherwise a half-dead process/profile remains in /tmp, leaving too
+ * little space for the fresh Chromium started by the retry.
  */
 async function discardBrowser(browser: Browser): Promise<void> {
+  // Compare before nulling: a concurrent render may already have cached a
+  // different (healthy) browser, and that one must survive this discard.
   const cached = browserPromise;
-  browserPromise = null;
   const cachedBrowser = await cached?.catch(() => null);
-  if (cachedBrowser === browser) {
-    await browser.close().catch(() => undefined);
+  if (browserPromise === cached && cachedBrowser === browser) {
+    browserPromise = null;
   }
+
+  await browser.close().catch(() => undefined);
 }
 
 /**

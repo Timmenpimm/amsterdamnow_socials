@@ -124,9 +124,17 @@ async function renderNowCarouselResponse(
     });
   } catch (error) {
     console.error("NOW carousel render failed:", error);
-    return isNowRendererUnavailable(error)
-      ? NextResponse.json({ error: NOW_RENDER_UNAVAILABLE }, { status: 503 })
-      : NextResponse.json({ error: NOW_RENDER_FAILED }, { status: 500 });
+    if (isNowRendererUnavailable(error)) {
+      return NextResponse.json({ error: NOW_RENDER_UNAVAILABLE }, { status: 503 });
+    }
+    // Append the exception message (never the stack): without it the article
+    // tool only ever shows "Er ging iets mis", which makes a Chromium crash
+    // indistinguishable from a template bug.
+    const detail = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      { error: detail ? `${NOW_RENDER_FAILED} (${detail})` : NOW_RENDER_FAILED },
+      { status: 500 }
+    );
   }
 }
 
