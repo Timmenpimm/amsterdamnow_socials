@@ -151,7 +151,24 @@ async function sweepOrphanedProfiles(): Promise<void> {
   }
 }
 
-async function launchBrowser(): Promise<Browser> {
+/**
+ * Serialiseert álle Chromium-launches binnen dit proces. Op Vercel's Fluid
+ * compute delen gelijktijdige requests één instance (en dus één /tmp):
+ * @sparticuz/chromium pakt de binary bij de eerste executablePath() naar
+ * /tmp uit, en twee gelijktijdige launches racen dan tussen schrijven en
+ * spawnen — de verliezer crasht op `spawn ETXTBSY` (gezien bij het
+ * voorrenderen van publish-slides). Ná de launch mogen renders gewoon
+ * parallel; alleen het starten zelf staat in de rij.
+ */
+let launchQueue: Promise<unknown> = Promise.resolve();
+
+function launchBrowser(): Promise<Browser> {
+  const next = launchQueue.then(launchBrowserUnserialized, launchBrowserUnserialized);
+  launchQueue = next.catch(() => undefined);
+  return next;
+}
+
+async function launchBrowserUnserialized(): Promise<Browser> {
   await sweepOrphanedProfiles();
 
   if (isServerlessRuntime()) {
