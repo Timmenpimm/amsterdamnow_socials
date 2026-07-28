@@ -42,6 +42,7 @@ export async function GET(request: Request) {
           isUrl: placeholder.isUrl ?? false,
           enumValues: placeholder.enumValues ?? null,
           zeroPadTo: placeholder.zeroPadTo ?? null,
+          autoCount: placeholder.autoCount ?? false,
           allowsLineBreak: placeholder.allowsLineBreak ?? false,
         })),
       };
