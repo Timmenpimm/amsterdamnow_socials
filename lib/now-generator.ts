@@ -172,7 +172,9 @@ export async function generateNowCarousel(
   opts: GenerateNowCarouselOptions = {}
 ): Promise<NowCarouselContent> {
   const cleanArticle = {
-    title: article.title,
+    // Ook de titel door stripHtml: die belandt letterlijk op de coverslide, en
+    // WordPress levert hem met entiteiten (&amp;, &#8216;, &nbsp;) aan.
+    title: stripHtml(article.title),
     excerpt: article.excerpt ?? "",
     content: stripHtml(article.content),
   };
@@ -227,7 +229,7 @@ export async function generateNowCarousel(
     hashtags = (generatedHashtags as string[] | undefined) ?? [];
   }
 
-  const slides = buildNowSlides(family, draft, images);
+  const slides = buildNowSlides(family, draft, images, cleanArticle.title);
 
   const problems = validateNowSlides(family, slides);
   if (problems.length > 0) {
@@ -239,15 +241,18 @@ export async function generateNowCarousel(
 
 /**
  * Tokens die de applicatie zelf invult: de foto, de layoutrichting, het
- * volgnummer en het aantal items. Een regeneratie neemt die ongewijzigd over
- * uit de bestaande slide, zodat beeld en nummering niet verspringen.
+ * volgnummer, het aantal items en de artikeltitel. Een regeneratie neemt die
+ * ongewijzigd over uit de bestaande slide, zodat beeld en nummering niet
+ * verspringen — en zodat de coverkop (die de redacteur mogelijk zelf heeft
+ * ingekort) niet wegvalt bij het herschrijven van die slide.
  */
 function isAutoFilled(placeholder: NowPlaceholderSpec): boolean {
   return Boolean(
     placeholder.isUrl ||
       placeholder.enumValues ||
       placeholder.zeroPadTo ||
-      placeholder.autoCount
+      placeholder.autoCount ||
+      placeholder.fromArticleTitle
   );
 }
 

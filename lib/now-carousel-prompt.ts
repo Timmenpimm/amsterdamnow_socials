@@ -1,16 +1,18 @@
 import "server-only";
 
 import {
+  editablePlaceholders,
   getNowFamilyPlan,
   textPlaceholders,
   type NowFamilyStep,
   type NowStoredSlide,
 } from "@/lib/now-carousel";
 import type { CleanArticle } from "@/lib/carousel-prompt";
-import type {
-  NowPlaceholderSpec,
-  NowSlideType,
-  NowTemplateFamily,
+import {
+  getNowTemplateSpec,
+  type NowPlaceholderSpec,
+  type NowSlideType,
+  type NowTemplateFamily,
 } from "@/templates/now/manifest";
 
 /**
@@ -88,6 +90,31 @@ function describeStep(
 }
 
 /**
+ * Zoekt de slide met het fromArticleTitle-token en legt uit dat die kop de
+ * letterlijke artikeltitel is. Het token zit niet in het schema — zonder deze
+ * regel weet het model niet dat de kop er al staat en schrijft het hem
+ * verderop in de carousel gewoon opnieuw.
+ */
+function describeArticleTitleRule(family: NowTemplateFamily): string {
+  const plan = getNowFamilyPlan(family);
+
+  for (const [position, step] of plan.steps.entries()) {
+    const spec = getNowTemplateSpec(
+      step.templateFamily ?? family,
+      step.slideType
+    );
+    const titleToken = spec.placeholders.find((p) => p.fromArticleTitle);
+    if (!titleToken) continue;
+
+    return `Slide ${position + 1} ("${step.slideType}") toont de titel van het artikel woordelijk, precies zoals die boven het artikel staat. Dat veld (${titleToken.name}) vult de applicatie zelf in: jij levert het niet aan en je bedenkt er ook geen kortere hook voor.
+
+Ga er dus van uit dat de lezer die kop al gelezen heeft. Herhaal of parafraseer hem nergens anders in de carousel — niet in een kicker, niet in een tussenkop, niet in de afsluiter — en open ook de caption niet met dezelfde zin. Elke slide na de eerste voegt iets toe wat er nog niet stond.`;
+  }
+
+  return "";
+}
+
+/**
  * System prompt: who writes, in welke volgorde de slides komen en welke
  * tokens elke slide precies nodig heeft.
  */
@@ -96,6 +123,7 @@ export function buildNowSystemPrompt(family: NowTemplateFamily): string {
   const steps = plan.steps
     .map((step, i) => describeStep(family, step, i + 1))
     .join("\n\n");
+  const titleRule = describeArticleTitleRule(family);
 
   return `Je bent eindredacteur bij Amsterdam NOW, een stadsgids voor Amsterdam. Je zet een gepubliceerd artikel om in een carousel van het type "${plan.label}".
 
@@ -106,7 +134,7 @@ ${NOW_VOICE}
 Bouw de carousel op in exact deze volgorde:
 
 ${steps}
-
+${titleRule ? `\n${titleRule}\n` : ""}
 ${NOW_FIELD_RULES}
 
 Daarnaast lever je:
@@ -124,10 +152,14 @@ export function buildNowUserPrompt(
   family: NowTemplateFamily
 ): string {
   const plan = getNowFamilyPlan(family);
+  // Alleen benoemen als deze familie de titel ook echt op een slide zet.
+  const titleLabel = describeArticleTitleRule(family)
+    ? "Titel (staat straks letterlijk op de eerste slide; niet herhalen)"
+    : "Titel";
 
   return `Maak een Amsterdam NOW "${plan.label}"-carousel op basis van het onderstaande artikel.
 
-Titel: ${article.title}
+${titleLabel}: ${article.title}
 
 Samenvatting: ${article.excerpt || "(geen samenvatting beschikbaar)"}
 
@@ -151,13 +183,22 @@ export function buildNowSlideSystemPrompt(
 ): string {
   const plan = getNowFamilyPlan(family);
 
+  // Heeft juist déze slide de artikeltitel, dan blijft die staan: hij zit niet
+  // in de velden hieronder en de applicatie schrijft de bestaande waarde terug.
+  const titleToken = getNowTemplateSpec(family, slideType).placeholders.find(
+    (placeholder) => placeholder.fromArticleTitle
+  );
+  const titleNote = titleToken
+    ? ` De kop van deze slide (${titleToken.name}) is de letterlijke titel van het artikel; die blijft ongewijzigd staan en herschrijf je niet. Schrijf de overige velden zo dat ze die kop aanvullen in plaats van herhalen.`
+    : "";
+
   return `Je bent eindredacteur bij Amsterdam NOW, een stadsgids voor Amsterdam. Je herschrijft één slide van een bestaande carousel van het type "${plan.label}".
 
 Doel van dit carouseltype: ${plan.purpose}
 
 ${NOW_VOICE}
 
-Je herschrijft uitsluitend de slide van het type "${slideType}". De overige slides blijven ongewijzigd: schrijf dus iets anders dan wat daar al staat en herhaal geen plek, feit of formulering die elders in de carousel voorkomt. De foto, het volgnummer en het aantal items van deze slide staan vast en lever je niet aan.
+Je herschrijft uitsluitend de slide van het type "${slideType}". De overige slides blijven ongewijzigd: schrijf dus iets anders dan wat daar al staat en herhaal geen plek, feit of formulering die elders in de carousel voorkomt. De foto, het volgnummer en het aantal items van deze slide staan vast en lever je niet aan.${titleNote}
 
 Deze slide heeft precies deze tekstvelden:
 ${describePlaceholders(placeholders)}
@@ -172,8 +213,11 @@ function summariseSlide(
   slide: NowStoredSlide,
   resolvedFamily: NowTemplateFamily
 ): string {
-  const writable = textPlaceholders(resolvedFamily, slide.slideType);
-  const parts = writable
+  // editablePlaceholders in plaats van textPlaceholders: de artikeltitel is
+  // geen modelveld, maar staat wél op de slide. Zou hij hier ontbreken, dan
+  // ziet het model de coverkop niet en schrijft het die alsnog opnieuw.
+  const shown = editablePlaceholders(resolvedFamily, slide.slideType);
+  const parts = shown
     .map((placeholder) => {
       const value = (slide.values[placeholder.name] ?? "").trim();
       if (!value) return null;
@@ -181,7 +225,8 @@ function summariseSlide(
         value.length > NEIGHBOUR_VALUE_MAX
           ? `${value.slice(0, NEIGHBOUR_VALUE_MAX)}…`
           : value;
-      return `${placeholder.name}: ${short}`;
+      const fixed = placeholder.fromArticleTitle ? " (vaste artikeltitel)" : "";
+      return `${placeholder.name}: ${short}${fixed}`;
     })
     .filter((part): part is string => part !== null);
 

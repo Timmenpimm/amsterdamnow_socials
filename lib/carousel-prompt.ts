@@ -30,28 +30,58 @@ const LANGUAGE_NAMES: Record<string, string> = {
 };
 
 /**
- * Strips HTML tags and the handful of entities WordPress commonly emits,
- * without pulling in a full HTML parser dependency. This is intentionally
- * not a general-purpose sanitizer — it only needs to turn
- * `post.content.rendered` into readable plain text for an LLM prompt.
+ * Strips HTML tags and the entities WordPress commonly emits, without pulling
+ * in a full HTML parser dependency. This is intentionally not a
+ * general-purpose sanitizer — it only needs to turn `post.content.rendered`
+ * into readable plain text.
+ *
+ * Ook gebruikt voor de artikeltitel, die letterlijk op de coverslide van een
+ * NOW-carousel belandt (lib/now-generator.ts): WordPress levert daar
+ * &#8216;-achtige krullende aanhalingstekens in, en die moeten als teken op
+ * de slide staan, niet als entiteit.
  */
 export function stripHtml(html: string): string {
-  return html
+  // Tags eruit, dan de entiteiten, dan pas de witruimte: een gedecodeerde
+  // &#160; moet nog met de rest van de spaties samenvallen.
+  const withoutTags = html
     .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<[^>]+>/g, " ");
+
+  return decodeNumericEntities(withoutTags)
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
-    .replace(/&#0?39;/gi, "'")
     .replace(/&mdash;/gi, "—")
     .replace(/&ndash;/gi, "–")
     .replace(/&hellip;/gi, "…")
+    .replace(/&lsquo;/gi, "‘")
+    .replace(/&rsquo;/gi, "’")
+    .replace(/&ldquo;/gi, "“")
+    .replace(/&rdquo;/gi, "”")
     .replace(/[ \t\f\v]+/g, " ")
     .replace(/\n\s*\n+/g, "\n\n")
     .trim();
+}
+
+/**
+ * Zet &#8216; / &#x2018;-entiteiten om naar het teken zelf. De named entities
+ * hierboven staan één voor één; numerieke komen in te veel varianten om op te
+ * sommen, dus die gaan generiek. Codepoints buiten bereik blijven staan zoals
+ * ze zijn — liever een zichtbare entiteit dan een exception.
+ */
+function decodeNumericEntities(text: string): string {
+  return text.replace(/&#(x[0-9a-f]+|\d+);/gi, (match, code: string) => {
+    const codePoint = code.toLowerCase().startsWith("x")
+      ? Number.parseInt(code.slice(1), 16)
+      : Number.parseInt(code, 10);
+    if (!Number.isFinite(codePoint) || codePoint < 1 || codePoint > 0x10ffff) {
+      return match;
+    }
+    return String.fromCodePoint(codePoint);
+  });
 }
 
 /**

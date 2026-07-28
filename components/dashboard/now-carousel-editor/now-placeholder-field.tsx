@@ -122,6 +122,17 @@ export function NowPlaceholderField({
 
   const isLongText = !spec.allowsLineBreak && LONG_TEXT_PATTERN.test(spec.description);
 
+  // Bewust bewerkbaar: de AI schrijft deze kop niet (hij komt letterlijk uit
+  // WordPress), maar de redacteur mag hem net als bij een krantenkop inkorten.
+  const hints = [
+    spec.fromArticleTitle
+      ? "Overgenomen uit de artikeltitel. Je mag hem hier inkorten; de AI raakt hem niet aan."
+      : null,
+    spec.allowsLineBreak
+      ? "Gebruik <br> om zelf te bepalen waar de regel afbreekt."
+      : null,
+  ].filter((hint): hint is string => hint !== null);
+
   return (
     <div className="flex flex-col gap-2">
       <Label htmlFor={fieldId}>{label}</Label>
@@ -141,14 +152,7 @@ export function NowPlaceholderField({
           onChange={(event) => onChange(event.target.value)}
         />
       )}
-      <FieldHint
-        spec={spec}
-        extra={
-          spec.allowsLineBreak
-            ? "Gebruik <br> om zelf te bepalen waar de regel afbreekt."
-            : undefined
-        }
-      />
+      <FieldHint spec={spec} extra={hints.join(" ") || undefined} />
     </div>
   );
 }

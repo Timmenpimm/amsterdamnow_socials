@@ -16,10 +16,16 @@ import {
  * the slide mapping all follow automatically.
  *
  * Division of labour per placeholder:
- *   - isUrl        -> filled from the article's images, never invented by the AI
- *   - enumValues   -> cycled by position (layout_richting alternates)
- *   - zeroPadTo    -> the 1-based position within its repeated step
- *   - everything else -> written by the AI
+ *   - isUrl            -> filled from the article's images, never invented by the AI
+ *   - enumValues       -> cycled by position (layout_richting alternates)
+ *   - zeroPadTo        -> the 1-based position within its repeated step
+ *   - autoCount        -> the number of slides the repeated step produced
+ *   - fromArticleTitle -> the literal WordPress title of the article
+ *   - everything else  -> written by the AI
+ *
+ * De redacteur kan in de editor alles bijstellen behalve de genummerde
+ * tokens; dat de titel niet door het model geschreven wordt, betekent dus niet
+ * dat hij vastligt (zie editablePlaceholders()).
  */
 
 /** A NOW carousel stores `now:<family>` in Carousel.template. */
@@ -195,13 +201,32 @@ export function getNowFamilyPlan(family: NowTemplateFamily): NowFamilyPlan {
   return plan;
 }
 
-/** Placeholders the model has to write: everything that isn't auto-filled. */
-export function textPlaceholders(
+/**
+ * Placeholders die vrije tekst bevatten: alles behalve beeld, layoutrichting,
+ * volgnummer en aantal. De artikeltitel zit hier wél bij — hij wordt niet door
+ * het model geschreven, maar de redacteur mag hem in de editor inkorten, en
+ * voor promptcontext telt hij als tekst van die slide.
+ */
+export function editablePlaceholders(
   family: NowTemplateFamily,
   slideType: NowSlideType
 ): NowPlaceholderSpec[] {
   return getNowTemplateSpec(family, slideType).placeholders.filter(
     (p) => !p.isUrl && !p.enumValues && !p.zeroPadTo && !p.autoCount
+  );
+}
+
+/**
+ * Placeholders die het model moet schrijven: de bewerkbare tekstvelden minus
+ * de artikeltitel, die de applicatie letterlijk uit het artikel overneemt.
+ * Bepaalt zowel het structured-output-schema als de promptbeschrijving.
+ */
+export function textPlaceholders(
+  family: NowTemplateFamily,
+  slideType: NowSlideType
+): NowPlaceholderSpec[] {
+  return editablePlaceholders(family, slideType).filter(
+    (p) => !p.fromArticleTitle
   );
 }
 
@@ -275,7 +300,14 @@ export interface NowImageSources {
 export function buildNowSlides(
   family: NowTemplateFamily,
   draft: NowCarouselDraft,
-  images: NowImageSources = {}
+  images: NowImageSources = {},
+  /**
+   * De letterlijke artikeltitel voor de fromArticleTitle-tokens (de coverkop).
+   * HTML-entiteiten moeten er al uit zijn; de aanroeper haalt de titel door
+   * stripHtml() van lib/carousel-prompt.ts, dat hier niet geïmporteerd kan
+   * worden omdat deze module ook in de browser draait.
+   */
+  articleTitle: string = ""
 ): NowStoredSlide[] {
   const plan = getNowFamilyPlan(family);
   const slides: NowStoredSlide[] = [];
@@ -329,6 +361,17 @@ export function buildNowSlides(
         }
         if (placeholder.zeroPadTo) {
           values[placeholder.name] = String(positionInStep + 1);
+          continue;
+        }
+        // De coverkop is de artikeltitel zelf, niet iets wat het model
+        // bedenkt: zo staat er op slide 1 precies wat er boven het artikel
+        // staat. De redacteur kan hem daarna in de editor inkorten.
+        if (placeholder.fromArticleTitle) {
+          // Valt terug op de modelwaarde als er geen titel is meegegeven, zodat
+          // een lege kop nooit ongemerkt op slide 1 belandt.
+          values[placeholder.name] = cleanNowText(
+            articleTitle || textValues[placeholder.name] || ""
+          );
           continue;
         }
         values[placeholder.name] = cleanNowText(textValues[placeholder.name] ?? "");

@@ -333,6 +333,84 @@ function applyReplacements(html: string, replacements: Map<string, string>): str
   return output;
 }
 
+/**
+ * Shrink-to-fit voor koppen die een letterlijke artikeltitel moeten dragen.
+ *
+ * Draait in de pagina, ná `document.fonts.ready` (anders meet je de fallback-
+ * letter) en vóór de screenshot. Elk element met `data-autofit` krijgt de
+ * grootste hele pixelmaat waarbij zijn onafgekapte teksthoogte binnen het
+ * beschikbare gebied past:
+ *
+ *   budget  = de `max-height` uit de CSS (px). Zonder max-height valt hij terug
+ *             op de hoogte die het element nú al heeft — dan verandert er dus
+ *             niets aan bestaande templates.
+ *   start   = de font-size uit de CSS (eventuele inline waarde wordt eerst
+ *             weggegooid, zodat een tweede run exact hetzelfde oplevert).
+ *   min     = `data-autofit-min` in px, anders de helft van de startmaat.
+ *
+ * Meten gebeurt met de clamp/max-height/overflow tijdelijk uitgezet: anders
+ * meet je de al afgekapte hoogte en denkt elke maat dat hij past. De zoektocht
+ * is een binaire zoektocht over hele pixels (≈7 layoutrondes per element), en
+ * elementen zonder `data-autofit` worden niet aangeraakt.
+ *
+ * Let op bij het aanpassen: deze functie wordt als broncode naar de browser
+ * gestuurd (page.evaluate). Hulpfuncties erbinnen zijn daarom verboden —
+ * esbuild/tsx wikkelt die in een `__name(...)`-aanroep die in de pagina niet
+ * bestaat, en de render valt dan om met "__name is not defined".
+ */
+function autofitInPage(): void {
+  const elements = Array.from(document.querySelectorAll<HTMLElement>('[data-autofit]'));
+
+  for (const el of elements) {
+    // Terug naar de CSS-waarde, zodat een herhaalde run hetzelfde antwoord geeft.
+    el.style.removeProperty('font-size');
+
+    const computed = getComputedStyle(el);
+    const start = Math.floor(parseFloat(computed.fontSize));
+    if (!Number.isFinite(start) || start <= 0) continue;
+
+    const attrMin = parseFloat(el.getAttribute('data-autofit-min') ?? '');
+    const min = Math.min(
+      start,
+      Number.isFinite(attrMin) && attrMin > 0 ? Math.floor(attrMin) : Math.round(start / 2)
+    );
+
+    const declaredMax = parseFloat(computed.maxHeight);
+    const budget = Number.isFinite(declaredMax) && declaredMax > 0
+      ? declaredMax
+      : el.getBoundingClientRect().height;
+    if (!(budget > 0)) continue;
+
+    // Alles wat afkapt even uit, anders meet je de afkapping in plaats van de tekst.
+    const inlineStyle = el.getAttribute('style') ?? '';
+    el.style.setProperty('-webkit-line-clamp', 'unset', 'important');
+    el.style.setProperty('max-height', 'none', 'important');
+    el.style.setProperty('overflow', 'visible', 'important');
+
+    const ceiling = budget + 0.5;
+    let best = min;
+
+    el.style.setProperty('font-size', `${start}px`, 'important');
+    if (Math.max(el.scrollHeight, el.getBoundingClientRect().height) <= ceiling) {
+      best = start;
+    } else {
+      // lo = grootste maat die past (of de ondergrens), hi = maat die niet past.
+      let lo = min;
+      let hi = start;
+      while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        el.style.setProperty('font-size', `${mid}px`, 'important');
+        if (Math.max(el.scrollHeight, el.getBoundingClientRect().height) <= ceiling) lo = mid;
+        else hi = mid;
+      }
+      best = lo;
+    }
+
+    el.setAttribute('style', inlineStyle);
+    el.style.setProperty('font-size', `${best}px`);
+  }
+}
+
 async function renderSpec(
   browser: Browser,
   spec: NowTemplateSpec,
@@ -346,6 +424,7 @@ async function renderSpec(
     const page = await context.newPage();
     await page.setContent(html, { waitUntil: 'load' });
     await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(autofitInPage);
     return await page.screenshot({ type: 'png' });
   } finally {
     // A dying browser makes context.close() throw too; swallowing that keeps
