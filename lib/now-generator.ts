@@ -22,6 +22,7 @@ import {
   buildNowSystemPrompt,
   buildNowUserPrompt,
 } from "@/lib/now-carousel-prompt";
+import type { NowItemImage } from "@/lib/now-item-images";
 import {
   InvalidCarouselOutputError,
   InvalidSlideOutputError,
@@ -59,6 +60,13 @@ export interface GenerateNowCarouselOptions {
   imageUrl?: string | null;
   /** Optional per-item images, in order, for the repeated slides. */
   itemImageUrls?: string[];
+  /**
+   * Naam van de zaak → foto van díe zaak. Het model kiest zelf welke items van
+   * het artikel de carousel halen, dus zonder deze koppeling staat er bij een
+   * niet-oplopende keuze een foto van de verkeerde zaak. Zie
+   * lib/now-item-images.ts.
+   */
+  itemImages?: NowItemImage[];
 }
 
 export interface NowCarouselContent {
@@ -182,6 +190,7 @@ export async function generateNowCarousel(
   const images = {
     cover: opts.imageUrl ?? undefined,
     items: opts.itemImageUrls,
+    byName: opts.itemImages,
   };
 
   let draft: NowCarouselDraft;

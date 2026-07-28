@@ -10,7 +10,8 @@
     "postinstall": "prisma generate",
     "test:generate": "MOCK_AI=1 tsx --conditions=react-server scripts/test-generate.ts",
     "test:carousel-api": "MOCK_AI=1 tsx --conditions=react-server scripts/test-carousel-api.ts",
-    "test:instagram": "MOCK_INSTAGRAM=1 tsx --conditions=react-server scripts/test-instagram.ts"
+    "test:instagram": "MOCK_INSTAGRAM=1 tsx --conditions=react-server scripts/test-instagram.ts",
+    "test:item-images": "tsx scripts/test-item-images.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.17",

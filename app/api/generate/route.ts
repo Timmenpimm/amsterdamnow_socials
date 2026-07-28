@@ -6,6 +6,7 @@ import { resolveApiUserId } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 import { isNowTemplateId, parseNowTemplateId } from "@/lib/now-carousel";
 import { generateNowCarousel } from "@/lib/now-generator";
+import type { NowItemImage } from "@/lib/now-item-images";
 import {
   InvalidCarouselOutputError,
   MissingOpenAiKeyError,
@@ -33,6 +34,19 @@ const inlineArticleSchema = z.object({
   // uitsluitend door NOW-templates gebruikt voor detail-/itemslides; de
   // generieke satori-generator kent alleen imageUrl.
   imageUrls: z.array(z.string().url()).max(20).optional(),
+  // Naam van de zaak → foto van díe zaak. imageUrls blijft de terugval: het
+  // model kiest zelf welke items van het artikel de carousel halen, dus een
+  // toewijzing puur op volgorde zet de foto van item 1 bij item 3. Alleen de
+  // NOW-itemslides (met een item_naam-token) gebruiken dit.
+  itemImages: z
+    .array(
+      z.object({
+        naam: z.string().trim().min(1).max(300),
+        imageUrl: z.string().url(),
+      })
+    )
+    .max(20)
+    .optional(),
   categories: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
 });
@@ -137,6 +151,8 @@ export async function POST(request: Request) {
   // Wordt niet in het bestaande Article-model opgeslagen: dit is de
   // volgorde van de actuele WordPress-media bij deze ene generatie.
   let itemImageUrls: string[] | undefined;
+  // Idem, maar dan de koppeling naam → foto (zie inlineArticleSchema).
+  let itemImages: NowItemImage[] | undefined;
 
   if ("articleId" in parsed.data) {
     const { articleId } = parsed.data;
@@ -158,6 +174,7 @@ export async function POST(request: Request) {
     const imageUrls = [...new Set(input.imageUrls ?? [])];
     const coverImageUrl = input.imageUrl ?? imageUrls[0] ?? null;
     itemImageUrls = imageUrls.filter((url) => url !== coverImageUrl);
+    itemImages = input.itemImages;
 
     // Inline articles hang off the caller's WordPressConnection. External
     // callers may not have configured one yet, so fall back to a stub row
@@ -227,7 +244,7 @@ export async function POST(request: Request) {
             excerpt: article.excerpt,
           },
           nowFamily,
-          { imageUrl: article.imageUrl, itemImageUrls }
+          { imageUrl: article.imageUrl, itemImageUrls, itemImages }
         )
       : await generateCarousel({
           title: article.title,
