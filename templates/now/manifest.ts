@@ -3,7 +3,12 @@
  *
  * These 19 files (in this same directory) are a verbatim design handoff from
  * Claude Design — see docs/design/social-templates/HANDOFF-README.md for the
- * hotspot/lijstje/event set and CAROUSEL_PLACEHOLDERS.md for agenda/gids. They
+ * hotspot/event set and CAROUSEL_PLACEHOLDERS.md for the rest. The agenda,
+ * gids and lijstje files come from the "Carousel - Templates" board (juli
+ * 2026): one full-bleed photo per slide, a gradient to black and the text
+ * bottom-left, without a logo. Those three families are what that board
+ * covers; hotspot and event keep the older design set and are retired in
+ * lib/now-carousel.ts, so they are not offered for new carousels. They
  * are used as-is: {{placeholder}} tokens get string-replaced, then the file
  * is screenshotted at its exact pixel size (lib/renderer-now.ts). Do not
  * reimplement the markup; this manifest only describes it.
@@ -144,13 +149,14 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
     file: 'lijstje_cover.html',
     dimensions: LIJSTJE_DIMENSIONS,
     placeholders: [
+      { name: 'cover_image_url', description: 'Full-bleed cover photo URL', isUrl: true },
       {
         name: 'aantal_items',
-        description: 'Huge black number: how many items the list has',
+        description: 'Red kicker number: how many items the list has',
         autoCount: true,
       },
-      { name: 'categorie', description: 'Vertical red uppercase category label (writing-mode: vertical-rl)' },
-      { name: 'kop', description: 'Black headline, max 4 words' },
+      { name: 'categorie', description: 'Kicker label next to the number' },
+      { name: 'kop', description: 'White headline, max 4 words' },
     ],
     reuse: { min: 1, max: 1, description: 'Always slide 1 of the lijstje carousel.' },
   },
@@ -171,6 +177,7 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
         name: 'item_wijk',
         description: 'Neighborhood only — template prefixes it with "Amsterdam " automatically.',
       },
+      { name: 'item_body', description: 'One line about the place, max ~110 characters' },
     ],
     reuse: { min: 1, max: 10, description: 'Reused once per ranked entry, up to 10x.' },
   },
@@ -179,8 +186,15 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
     slideType: 'cta',
     file: 'lijstje_cta.html',
     dimensions: LIJSTJE_DIMENSIONS,
-    placeholders: [],
-    reuse: { min: 1, max: 1, description: 'Static closing slide, no placeholders — always the final slide.' },
+    placeholders: [
+      {
+        name: 'cta_titel',
+        description: 'CTA headline, e.g. "DE VOLLEDIGE LIJST"; <br> allowed',
+        allowsLineBreak: true,
+      },
+      { name: 'cta_sub', description: 'CTA subline, e.g. "Staat in onze bio"' },
+    ],
+    reuse: { min: 1, max: 1, description: 'Always the final slide.' },
   },
 
   // --- Event story (Instagram Stories, 4 frames) ---
@@ -321,22 +335,16 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
     file: 'gids_item.html',
     dimensions: GIDS_DIMENSIONS,
     placeholders: [
-      { name: 'item_image_url', description: 'Item photo URL', isUrl: true },
-      { name: 'item_categorie', description: 'Small uppercase category label' },
-      { name: 'item_nummer', description: 'Item number, zero-padded: 01, 02, …', zeroPadTo: 2 },
-      { name: 'item_naam', description: 'Item name; <br> allowed', allowsLineBreak: true },
+      { name: 'item_image_url', description: 'Full-bleed item photo', isUrl: true },
+      { name: 'item_nummer', description: 'Red kicker number, zero-padded: 01, 02, …', zeroPadTo: 2 },
+      { name: 'item_categorie', description: 'Kicker label next to the number' },
+      { name: 'item_naam', description: 'Item name, max 2 lines; <br> allowed', allowsLineBreak: true },
       { name: 'item_body', description: 'Body copy, max ~110 characters' },
-      {
-        name: 'layout_richting',
-        description: 'Which side the photo sits on; alternate per item for rhythm.',
-        enumValues: ['foto-links', 'foto-rechts'],
-      },
     ],
     reuse: {
       min: 2,
       max: 8,
-      description:
-        'Reused 2-8x, alternating layout_richting. Also the item slide of the lijstje-editie carousel.',
+      description: 'Reused 2-8x. Also the item slide of the lijstje-editie carousel.',
     },
   },
   {
@@ -362,8 +370,9 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
     file: 'lijstje_editie_cover.html',
     dimensions: LIJSTJE_DIMENSIONS,
     placeholders: [
+      { name: 'cover_image_url', description: 'Full-bleed cover photo URL', isUrl: true },
       { name: 'editie_titel', description: 'Edition title, e.g. "DE BESTE HOTSPOTS VAN JULI 2026"' },
-      { name: 'editie_footer', description: 'Footer line under the title' },
+      { name: 'editie_footer', description: 'Kicker line above the title' },
     ],
     reuse: {
       min: 1,

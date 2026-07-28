@@ -1,36 +1,51 @@
-> Design handoff uit Claude Design, aangeleverd door Martijn. Verbatim gekopieerd — niet herschrijven. Bijbehorende HTML-templates staan in `templates/now/` (agenda_*, gids_*, lijstje_editie_cover).
-
 # Carousel-templates — placeholders
 
-Alle bestanden: 1080 × 1350 px (Instagram 4:5), self-contained (fonts + logo als base64), geen JS, geen externe requests. Render met een headless browser op exact 1080×1350 en screenshot.
+Alle bestanden: 1080 × 1350 px (Instagram 4:5), self-contained (fonts als base64), geen JS, geen externe requests, **geen logo en geen "Amsterdam NOW" in beeld**. Render met een headless browser op exact 1080×1350 en screenshot.
 
-Vervang de `{{tokens}}` met string-replace. Lege tokens: geef een lege string mee — de layout blijft staan. Alle koppen worden geclampt (`-webkit-line-clamp`), dus te lange tekst breekt de slide niet, maar wordt afgekapt.
+Vervang de `{{tokens}}` met string-replace. Lege tokens: geef een lege string mee — de layout blijft staan. Koppen worden geclampt (`-webkit-line-clamp`), dus te lange tekst kapt af in plaats van de slide te breken.
 
-## Agenda-carousel (4 slides)
+## Eén layout-principe
+Full-bleed foto, verloop naar zwart onderaan, tekstblok linksonder: kicker (klein, uppercase, gespatieerd — rood deel is datum/nummer/categorie), kop in condensed bold uppercase, optioneel één regel body eronder. Info- en CTA-slides zijn dezelfde opbouw zonder foto.
+
+## Agenda-carousel
 | Bestand | Placeholders |
 |---|---|
-| `agenda_cover.html` | `{{cover_image_url}}`, `{{kicker}}` (bv. AGENDA / CULTUUR), `{{datum}}` (rode balk, 1 regel, bv. 25 JUL — 16 AUG), `{{event_titel}}` (max ~3 regels, ~20 tekens/regel), `{{locatie}}` (bv. NDSM — AMSTERDAM NOORD) |
-| `agenda_wat.html` | `{{sfeer_image_url}}`, `{{label}}` (bv. WAT IS HET?), `{{reden_zin}}` (1 zin, max ~120 tekens) |
+| `agenda_cover.html` | `{{cover_image_url}}`, `{{datum}}` (rood, bv. 25 jul — 16 aug), `{{kicker}}` (bv. Cultuur), `{{event_titel}}` (max 3 regels, ~18 tekens/regel), `{{locatie}}` |
+| `agenda_wat.html` | `{{sfeer_image_url}}`, `{{label}}` (bv. Wat is het?), `{{reden_zin}}` (max ~130 tekens) |
 | `agenda_praktisch.html` | `{{wanneer}}` + `{{wanneer_extra}}`, `{{waar}}` + `{{waar_extra}}`, `{{tickets}}` + `{{tickets_extra}}` |
-| `agenda_cta.html` | `{{cta_titel}}` (bv. PLAN JE BEZOEK), `{{cta_sub}}` (bv. Meer in de agenda) |
+| `agenda_cta.html` | `{{cta_titel}}`, `{{cta_sub}}` |
 
-## Gids-carousel (cover + item ×2–8 + CTA)
+## Gids-carousel
 | Bestand | Placeholders |
 |---|---|
-| `gids_cover.html` | `{{cover_image_url}}`, `{{kicker}}` (bv. BUURTEN / WEST), `{{gids_titel}}`, `{{gids_sub}}` |
-| `gids_item.html` | `{{layout_richting}}` = `foto-links` of `foto-rechts`, `{{item_image_url}}`, `{{item_categorie}}`, `{{item_nummer}}` (01, 02 …), `{{item_naam}}`, `{{item_body}}` (max ~110 tekens) |
-| `gids_cta.html` | `{{cta_titel}}` (bv. BEWAAR DEZE GIDS), `{{cta_sub}}` |
+| `gids_cover.html` | `{{cover_image_url}}`, `{{kicker}}`, `{{gids_titel}}`, `{{gids_sub}}` |
+| `gids_item.html` | `{{item_image_url}}`, `{{item_nummer}}` (rood: 01, 02 …), `{{item_categorie}}`, `{{item_naam}}` (max 2 regels), `{{item_body}}` (max ~110 tekens) |
+| `gids_cta.html` | `{{cta_titel}}`, `{{cta_sub}}` |
 
-Wissel `{{layout_richting}}` per item af (`foto-links`, `foto-rechts`, `foto-links` …) voor ritme in de carousel.
-
-## Lijstje-carousel (editie-cover + items)
+## Lijstje-carousel
 | Bestand | Placeholders |
 |---|---|
-| `lijstje_editie_cover.html` | `{{editie_titel}}` (bv. DE BESTE HOTSPOTS VAN JULI 2026), `{{editie_footer}}` |
-| `gids_item.html` | zelfde tokens als hierboven — de item-slide is voor beide carousels dezelfde |
+| `lijstje_cover.html` | `{{cover_image_url}}`, `{{aantal_items}}` (rood), `{{categorie}}`, `{{kop}}` |
+| `lijstje_editie_cover.html` | `{{cover_image_url}}`, `{{editie_footer}}` (kicker), `{{editie_titel}}` |
+| `lijstje_item.html` | `{{item_image_url}}`, `{{item_nummer}}`, `{{item_wijk}}`, `{{item_naam}}`, `{{item_body}}` |
+| `lijstje_cta.html` | `{{cta_titel}}`, `{{cta_sub}}` |
+
+## Event- en hotspot-carousel
+| Bestand | Placeholders |
+|---|---|
+| `event_hook.html` | `{{event_image_url}}`, `{{datum}}`, `{{event_titel}}` |
+| `event_reason.html` | `{{event_image_url}}`, `{{reden_zin}}` |
+| `event_practical.html` | `{{wanneer}}`, `{{waar}}`, `{{prijs}}` |
+| `event_link.html` | geen — vaste slotslide |
+| `hotspot_cover.html` | `{{cover_image_url}}`, `{{categorie}}`, `{{titel_hook}}` |
+| `hotspot_detail.html` | `{{detail_image_url}}`, `{{detail_label}}`, `{{detail_title}}`, `{{detail_body}}` |
+| `hotspot_statement.html` | `{{quote}}` |
+| `hotspot_cta.html` | `{{plek_naam}}`, `{{wijk}}` |
 
 ## Regels voor de generator
-- `{{*_image_url}}` moet een absolute URL of `file://`-pad zijn; bij een lege/ontbrekende afbeelding valt de slide terug op zwart (#111) en blijft de tekst leesbaar.
-- Voer titels aan in normale schrijfwijze; de templates zetten zelf om naar uppercase.
-- Geen HTML in tokens behalve een `<br>` in `{{event_titel}}`, `{{gids_titel}}`, `{{cta_titel}}` en `{{item_naam}}` als je de regelval zelf wilt bepalen.
-- Rood (#E90000) is systeem-kleur: alleen datum-balk, labels en de streep. Nooit als vlakvulling toevoegen.
+- `{{*_image_url}}` moet een absolute URL of `file://`-pad zijn; bij ontbrekend beeld valt de slide terug op zwart (#111) en blijft de tekst leesbaar.
+- Voer tekst aan in normale schrijfwijze; de templates zetten zelf om naar uppercase.
+- Geen HTML in tokens, behalve `<br>` in koppen als je de regelval zelf wilt bepalen.
+- Rood (#E90000) alleen in de kicker (datum, nummer, label) en de CTA-streep. Nooit als vlakvulling.
+- Geen logo, geen "Amsterdam NOW", geen amsterdamnow.com in beeld — account en profielfoto doen dat al. Verwijs in de CTA naar de bio.
+- `{{layout_richting}}` bestaat niet meer: alle item-slides zijn full-bleed.

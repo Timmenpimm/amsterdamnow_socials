@@ -14,6 +14,12 @@ import { closeNowRendererBrowser, renderNowSlide, type RenderNowSlideInput } fro
 
 const OUTPUT_DIR = path.join(process.cwd(), '.test-output', 'now');
 const MIN_BYTES = 20 * 1024;
+/**
+ * Slides without a photo (statement, CTA, practical) are flat text on black
+ * and legitimately compress far smaller than a photo slide, so they get their
+ * own floor instead of tripping the blank-render check.
+ */
+const MIN_BYTES_TEXT_ONLY = 6 * 1024;
 
 /** No network dependency: an inline SVG data URI stands in for real photography. */
 function placeholderImage(color: string, w: number, h: number): string {
@@ -39,6 +45,8 @@ interface Sample {
   label: string;
   expected: { width: number; height: number };
   input: RenderNowSlideInput;
+  /** Set for photo-less slides; defaults to MIN_BYTES. */
+  minBytes?: number;
 }
 
 const samples: Sample[] = [
@@ -93,7 +101,12 @@ const samples: Sample[] = [
     input: {
       family: 'lijstje',
       slideType: 'cover',
-      values: { aantal_items: '10', categorie: 'KOFFIE', kop: 'Beste koffie van Amsterdam' },
+      values: {
+        cover_image_url: placeholderImage('#5b5b5b', 1080, 1350),
+        aantal_items: '10',
+        categorie: 'KOFFIE',
+        kop: 'Beste koffie van Amsterdam',
+      },
     },
   },
   {
@@ -108,7 +121,125 @@ const samples: Sample[] = [
         item_image_url: placeholderImage('#4a4a4a', 1080, 1350),
         item_naam: 'Bakkerij Bond',
         item_wijk: 'Oost',
+        item_body: 'Zuurdesem uit eigen oven, en om elf uur is het brood op.',
       },
+    },
+  },
+  {
+    label: 'lijstje_cta',
+    expected: { width: 1080, height: 1350 },
+    minBytes: MIN_BYTES_TEXT_ONLY,
+    input: {
+      family: 'lijstje',
+      slideType: 'cta',
+      values: { cta_titel: 'De volledige lijst', cta_sub: 'Staat in onze bio' },
+    },
+  },
+  {
+    label: 'lijstje_editie_cover',
+    expected: { width: 1080, height: 1350 },
+    input: {
+      family: 'lijstje',
+      slideType: 'editie-cover',
+      values: {
+        cover_image_url: placeholderImage('#5b5b5b', 1080, 1350),
+        editie_titel: 'De beste hotspots van juli 2026',
+        editie_footer: 'Editie 7',
+      },
+    },
+  },
+  {
+    label: 'agenda_cover',
+    expected: { width: 1080, height: 1350 },
+    input: {
+      family: 'agenda',
+      slideType: 'cover',
+      values: {
+        cover_image_url: placeholderImage('#5b5b5b', 1080, 1350),
+        kicker: 'Cultuur',
+        datum: '25 jul — 16 aug',
+        event_titel: 'Universal Color',
+        locatie: 'NDSM-loods, Amsterdam Noord',
+      },
+    },
+  },
+  {
+    label: 'agenda_wat',
+    expected: { width: 1080, height: 1350 },
+    input: {
+      family: 'agenda',
+      slideType: 'wat',
+      values: {
+        sfeer_image_url: placeholderImage('#4a4a4a', 1080, 1350),
+        label: 'Wat is het?',
+        reden_zin: 'Twintig meter hoog, en je loopt er middendoor.',
+      },
+    },
+  },
+  {
+    label: 'agenda_praktisch',
+    expected: { width: 1080, height: 1350 },
+    minBytes: MIN_BYTES_TEXT_ONLY,
+    input: {
+      family: 'agenda',
+      slideType: 'praktisch',
+      values: {
+        wanneer: 'Dagelijks 10:00 — 22:00',
+        wanneer_extra: 'Laatste toegang 21:15',
+        waar: 'NDSM-loods, Noord',
+        waar_extra: 'Veer 906 vanaf Centraal',
+        tickets: 'Vanaf €18,50',
+        tickets_extra: 'Kinderen tot 12 gratis',
+      },
+    },
+  },
+  {
+    label: 'agenda_cta',
+    expected: { width: 1080, height: 1350 },
+    minBytes: MIN_BYTES_TEXT_ONLY,
+    input: {
+      family: 'agenda',
+      slideType: 'cta',
+      values: { cta_titel: 'Plan je bezoek', cta_sub: 'Datums en tickets in onze bio' },
+    },
+  },
+  {
+    label: 'gids_cover',
+    expected: { width: 1080, height: 1350 },
+    input: {
+      family: 'gids',
+      slideType: 'cover',
+      values: {
+        cover_image_url: placeholderImage('#5b5b5b', 1080, 1350),
+        kicker: 'Buurten / West',
+        gids_titel: 'Een dag op Westergas',
+        gids_sub: 'Vier plekken, van eerste koffie tot laatste rondje',
+      },
+    },
+  },
+  {
+    label: 'gids_item',
+    expected: { width: 1080, height: 1350 },
+    input: {
+      family: 'gids',
+      slideType: 'item',
+      values: {
+        item_image_url: placeholderImage('#4a4a4a', 1080, 1350),
+        item_nummer: '01',
+        item_categorie: 'Koffie',
+        item_naam: 'Coffee Bru',
+        item_body: 'Bakken ze zelf. Zit je zo een uur, met de krant.',
+      },
+    },
+  },
+  {
+    label: 'gids_cta',
+    expected: { width: 1080, height: 1350 },
+    minBytes: MIN_BYTES_TEXT_ONLY,
+    input: {
+      family: 'gids',
+      slideType: 'cta',
+      values: { cta_titel: 'Bewaar deze gids', cta_sub: 'De hele route staat in onze bio' },
     },
   },
   {
@@ -138,14 +269,15 @@ async function main(): Promise<void> {
 
     const { width, height } = parsePngDimensions(buffer);
     const dimsOk = width === sample.expected.width && height === sample.expected.height;
-    const sizeOk = buffer.byteLength > MIN_BYTES;
+    const minBytes = sample.minBytes ?? MIN_BYTES;
+    const sizeOk = buffer.byteLength > minBytes;
 
     results.push({
       label: sample.label,
       bytes: buffer.byteLength,
       dims: `${width}x${height}`,
       ok: dimsOk && sizeOk,
-      note: [dimsOk ? '' : `expected ${sample.expected.width}x${sample.expected.height}`, sizeOk ? '' : '<20KB!']
+      note: [dimsOk ? '' : `expected ${sample.expected.width}x${sample.expected.height}`, sizeOk ? '' : `<${Math.round(minBytes / 1024)}KB!`]
         .filter(Boolean)
         .join(' '),
     });
@@ -163,7 +295,7 @@ async function main(): Promise<void> {
     console.error(`\n${failures.length} render(s) failed validation.`);
     process.exitCode = 1;
   } else {
-    console.log(`\nAll ${results.length} renders passed (exact dimensions, >20KB).`);
+    console.log(`\nAll ${results.length} renders passed (exact dimensions, above the blank-render floor).`);
   }
 }
 

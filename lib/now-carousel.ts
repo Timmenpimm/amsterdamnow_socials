@@ -73,15 +73,16 @@ export const NOW_FAMILY_PLANS: readonly NowFamilyPlan[] = [
     ],
   },
   {
-    // Het ontwerpbord "Carousel - Templates" vervangt de oude lijstje-opzet
-    // (eigen cover/item/cta) door een wordmark-cover met de gids-item-slide.
+    // Het herziene ontwerpbord "Carousel - Templates" geeft het lijstje weer
+    // een eigen cover, item en sluiter, alle drie full-bleed.
     family: "lijstje",
     label: "Lijstje",
     purpose:
-      "Genummerde ranglijst ('de 10 beste …'): cover met het aantal en de kop, daarna één genummerde slide per plek.",
+      "Genummerde ranglijst ('de 10 beste …'): cover met het aantal en de kop, één genummerde slide per plek, en een afsluiter.",
     steps: [
       { slideType: "cover", min: 1, max: 1 },
-      { slideType: "item", min: 3, max: 10, templateFamily: "gids" },
+      { slideType: "item", min: 3, max: 10 },
+      { slideType: "cta", min: 1, max: 1 },
     ],
   },
   {
@@ -267,6 +268,11 @@ export function buildNowSlides(
   const repeatedEntry = repeatedStep ? draft[repeatedStep.slideType] : undefined;
   const repeatedCount = Array.isArray(repeatedEntry) ? repeatedEntry.length : 0;
 
+  // Loopt door over alle beeldslots na de cover, zodat elk slot het volgende
+  // artikelbeeld krijgt in plaats van dat slides met dezelfde positie binnen
+  // hun stap dezelfde foto delen.
+  let imageCursor = 0;
+
   for (const step of plan.steps) {
     const entry = draft[step.slideType];
     const entries: Record<string, string>[] = Array.isArray(entry)
@@ -288,7 +294,10 @@ export function buildNowSlides(
 
       for (const placeholder of spec.placeholders) {
         if (placeholder.isUrl) {
-          values[placeholder.name] = pickImage(images, slides.length, positionInStep);
+          values[placeholder.name] =
+            slides.length === 0
+              ? (images.cover ?? "")
+              : pickItemImage(images, imageCursor++);
           continue;
         }
         if (placeholder.enumValues) {
@@ -331,15 +340,17 @@ function cleanText(value: string): string {
     .trim();
 }
 
-function pickImage(
-  images: NowImageSources,
-  slideIndex: number,
-  positionInStep: number
-): string {
-  if (slideIndex === 0) {
+/**
+ * Geeft het beeld voor het n-de beeldslot na de cover. Zijn er minder
+ * artikelfoto's dan slots, dan begint de pool opnieuw: liever een herhaling
+ * verderop in de carousel dan elke slide dezelfde coverfoto.
+ */
+function pickItemImage(images: NowImageSources, imageIndex: number): string {
+  const items = images.items ?? [];
+  if (items.length === 0) {
     return images.cover ?? "";
   }
-  return images.items?.[positionInStep] ?? images.cover ?? "";
+  return items[imageIndex % items.length];
 }
 
 /**
