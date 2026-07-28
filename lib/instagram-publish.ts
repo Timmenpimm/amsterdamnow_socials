@@ -188,32 +188,28 @@ export async function publishCarouselForUser(
  * s-maxage) so Meta's own fetches are instant. A slide that fails to render
  * would fail its container anyway, so a non-OK response aborts the publish
  * while the FAILED status write still runs.
+ *
+ * Sequentieel, bewust: elke on-demand render start op serverless een eigen
+ * Chromium, en meerdere Chromiums tegelijk op één Fluid-instance zijn
+ * zwaar en gaven launch-races (spawn ETXTBSY — inmiddels ook geserialiseerd
+ * in lib/renderer-now.ts). Tien slides à enkele seconden past ruim binnen
+ * het 300s-budget van de publish-route.
  */
-const WARM_CONCURRENCY = 3;
-
 async function warmSlideRenders(slideImageUrls: string[]): Promise<void> {
   if (process.env.MOCK_INSTAGRAM === "1") return; // test URLs are not real
 
-  const queue = [...slideImageUrls];
-  const workers = Array.from(
-    { length: Math.min(WARM_CONCURRENCY, queue.length) },
-    async () => {
-      let url: string | undefined;
-      while ((url = queue.shift())) {
-        const response = await fetch(url, {
-          signal: AbortSignal.timeout(60_000),
-        });
-        if (!response.ok) {
-          throw new Error(
-            `Slide render failed while preparing publish (HTTP ${response.status}).`
-          );
-        }
-        // Drain the body so the connection is released.
-        await response.arrayBuffer();
-      }
+  for (const url of slideImageUrls) {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Slide render failed while preparing publish (HTTP ${response.status}).`
+      );
     }
-  );
-  await Promise.all(workers);
+    // Drain the body so the connection is released.
+    await response.arrayBuffer();
+  }
 }
 
 function toPublishError(error: unknown): Error {
