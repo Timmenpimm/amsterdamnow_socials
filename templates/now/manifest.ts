@@ -4,10 +4,11 @@
  * These 19 files (in this same directory) are a verbatim design handoff from
  * Claude Design — see docs/design/social-templates/HANDOFF-README.md for the
  * hotspot/event set and CAROUSEL_PLACEHOLDERS.md for the rest. The agenda,
- * gids and lijstje files come from the revised "Carousel - Templates" board
- * (juli 2026): one full-bleed photo per slide, a gradient to black and the
- * text bottom-left, without a logo. hotspot and event are renewed on that
- * board too but are not taken over here yet. They
+ * gids and lijstje files come from the "Carousel - Templates" board (juli
+ * 2026): one full-bleed photo per slide, a gradient to black and the text
+ * bottom-left, without a logo. Those three families are what that board
+ * covers; hotspot and event keep the older design set and are retired in
+ * lib/now-carousel.ts, so they are not offered for new carousels. They
  * are used as-is: {{placeholder}} tokens get string-replaced, then the file
  * is screenshotted at its exact pixel size (lib/renderer-now.ts). Do not
  * reimplement the markup; this manifest only describes it.
