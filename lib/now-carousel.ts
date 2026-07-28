@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { MAX_CAROUSEL_SLIDES } from "@/lib/instagram-limits";
 import {
   NOW_TEMPLATE_MANIFEST,
   getNowTemplateSpec,
@@ -81,7 +82,9 @@ export const NOW_FAMILY_PLANS: readonly NowFamilyPlan[] = [
       "Genummerde ranglijst ('de 10 beste …'): cover met het aantal en de kop, één genummerde slide per plek, en een afsluiter.",
     steps: [
       { slideType: "cover", min: 1, max: 1 },
-      { slideType: "item", min: 3, max: 10 },
+      // Max 8 items: het totaal (cover + items + cta) moet binnen Instagrams
+      // maximum van 10 slides per carousel blijven (MAX_CAROUSEL_SLIDES).
+      { slideType: "item", min: 3, max: 8 },
       { slideType: "cta", min: 1, max: 1 },
     ],
   },
@@ -122,6 +125,21 @@ export const NOW_FAMILY_PLANS: readonly NowFamilyPlan[] = [
     ],
   },
 ];
+
+// Guard bij module-load: een selecteerbaar plan mag nooit meer slides kunnen
+// produceren dan Instagram accepteert, anders wordt de carousel bij het
+// publiceren geweigerd (TooManySlidesError in lib/instagram.ts). Gooit meteen
+// zodat een toekomstig template dit niet ongemerkt opnieuw kan breken.
+for (const plan of NOW_FAMILY_PLANS) {
+  if (plan.retired) continue;
+  const maxSlides = plan.steps.reduce((total, step) => total + step.max, 0);
+  if (maxSlides > MAX_CAROUSEL_SLIDES) {
+    throw new Error(
+      `NOW family plan "${plan.family}" can produce ${maxSlides} slides, ` +
+        `but Instagram allows at most ${MAX_CAROUSEL_SLIDES} per carousel.`
+    );
+  }
+}
 
 export type NowFamily = (typeof NOW_FAMILY_PLANS)[number]["family"];
 

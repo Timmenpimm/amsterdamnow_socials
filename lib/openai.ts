@@ -12,6 +12,7 @@ import {
   stripHtml,
   type SlideSummary,
 } from "@/lib/carousel-prompt";
+import { MAX_CAROUSEL_SLIDES } from "@/lib/instagram-limits";
 import { buildMockCarouselContent } from "@/lib/openai-mock";
 import type { CarouselContent, Slide, SlideLayout } from "@/types/carousel";
 import type { WordPressPost } from "@/types/wordpress";
@@ -93,7 +94,9 @@ const slideSchema = z.object({
 const carouselContentSchema = z
   .object({
     title: z.string().trim().min(1),
-    slides: z.array(slideSchema).min(2).max(20),
+    // Capped at Instagram's carousel maximum so generation can never produce
+    // something lib/instagram.ts refuses to publish (TooManySlidesError).
+    slides: z.array(slideSchema).min(2).max(MAX_CAROUSEL_SLIDES),
     caption: z.string().trim().min(1),
     hashtags: z.array(z.string().trim().min(1)).min(1).max(30),
   })
@@ -149,7 +152,11 @@ export async function generateCarousel(
   opts: GenerateCarouselOptions = {}
 ): Promise<CarouselContent> {
   const promptOptions = {
-    slideCount: opts.slideCount ?? DEFAULT_SLIDE_COUNT,
+    // Never ask the model for more slides than Instagram publishes per carousel.
+    slideCount: Math.min(
+      opts.slideCount ?? DEFAULT_SLIDE_COUNT,
+      MAX_CAROUSEL_SLIDES
+    ),
     language: opts.language ?? DEFAULT_LANGUAGE,
     tone: opts.tone ?? DEFAULT_TONE,
   };

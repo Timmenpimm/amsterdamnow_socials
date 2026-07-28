@@ -1,6 +1,10 @@
 import "server-only";
 
 import { describeFetchError, withTimeout } from "@/lib/connections/shared";
+import {
+  MAX_CAROUSEL_SLIDES,
+  MIN_CAROUSEL_SLIDES,
+} from "@/lib/instagram-limits";
 
 /**
  * Instagram Graph API (v21.0) client for publishing carousels.
@@ -22,8 +26,6 @@ import { describeFetchError, withTimeout } from "@/lib/connections/shared";
 const GRAPH_API_VERSION = "v21.0";
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
-const MIN_CAROUSEL_SLIDES = 2;
-const MAX_CAROUSEL_SLIDES = 10;
 
 const POLL_INITIAL_DELAY_MS = 1500;
 const POLL_MAX_DELAY_MS = 8000;
