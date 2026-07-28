@@ -133,7 +133,7 @@ const TEMPLATES: TemplateBuild[] = [
     css: `
 .tagbox{position:absolute;top:64px;right:64px;left:420px;display:flex;flex-direction:column;align-items:flex-end;gap:14px}
 .tagbox .tag{position:static;max-width:100%}
-.tagnote{font-family:var(--body);font-weight:300;font-size:26px;line-height:1.3;letter-spacing:1px;color:rgba(255,255,255,.76);text-align:right;text-shadow:0 2px 28px rgba(0,0,0,.55);-webkit-line-clamp:2}
+.tagnote{font-family:var(--body);font-weight:400;font-size:26px;line-height:1.3;letter-spacing:1px;color:#fff;text-align:right;text-shadow:0 2px 20px rgba(0,0,0,.85);-webkit-line-clamp:2}
 .tagnote:empty{display:none}
 .place{display:block;-webkit-line-clamp:none}
 .place span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
