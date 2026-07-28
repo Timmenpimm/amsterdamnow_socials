@@ -79,7 +79,7 @@ export const NOW_FAMILY_PLANS: readonly NowFamilyPlan[] = [
     family: "lijstje",
     label: "Lijstje",
     purpose:
-      "Genummerde ranglijst ('de 10 beste …'): cover met het aantal en de kop, één genummerde slide per plek, en een afsluiter.",
+      "Genummerde ranglijst ('de 8 beste …'): cover met het aantal en de kop, één genummerde slide per plek, en een afsluiter.",
     steps: [
       { slideType: "cover", min: 1, max: 1 },
       // Max 8 items: het totaal (cover + items + cta) moet binnen Instagrams
