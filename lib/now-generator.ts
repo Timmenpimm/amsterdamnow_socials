@@ -8,18 +8,32 @@ import { stripHtml } from "@/lib/carousel-prompt";
 import {
   buildNowDraftSchema,
   buildNowSlides,
+  cleanNowText,
   getNowFamilyPlan,
+  slideTemplateFamily,
   textPlaceholders,
   validateNowSlides,
   type NowCarouselDraft,
   type NowStoredSlide,
 } from "@/lib/now-carousel";
 import {
+  buildNowSlideSystemPrompt,
+  buildNowSlideUserPrompt,
   buildNowSystemPrompt,
   buildNowUserPrompt,
 } from "@/lib/now-carousel-prompt";
-import { InvalidCarouselOutputError, MissingOpenAiKeyError } from "@/lib/openai";
-import type { NowTemplateFamily } from "@/templates/now/manifest";
+import {
+  InvalidCarouselOutputError,
+  InvalidSlideOutputError,
+  MissingOpenAiKeyError,
+  SlideNotFoundError,
+} from "@/lib/openai";
+import {
+  getNowTemplateSpec,
+  type NowPlaceholderSpec,
+  type NowTemplateFamily,
+  type NowTemplateSpec,
+} from "@/templates/now/manifest";
 
 /**
  * AI generation for the Amsterdam NOW carousels. Mirrors lib/openai.ts
@@ -101,26 +115,32 @@ function buildMockNowDraft(
 
   for (const step of plan.steps) {
     const placeholders = textPlaceholders(family, step.slideType);
-    const makeEntry = (position: number): Record<string, string> => {
-      const entry: Record<string, string> = {};
-      for (const placeholder of placeholders) {
-        entry[placeholder.name] =
-          `[MOCK] ${placeholder.name} ${position} — ${title}`.slice(0, 120);
-      }
-      return entry;
-    };
 
     if (step.max > 1) {
       const count = Math.min(Math.max(step.min, MOCK_REPEATS), step.max);
       draft[step.slideType] = Array.from({ length: count }, (_, i) =>
-        makeEntry(i + 1)
+        buildMockValues(placeholders, i + 1, title)
       );
     } else {
-      draft[step.slideType] = makeEntry(1);
+      draft[step.slideType] = buildMockValues(placeholders, 1, title);
     }
   }
 
   return draft;
+}
+
+/** One mock entry: every writable token filled with a recognisable stub. */
+function buildMockValues(
+  placeholders: NowPlaceholderSpec[],
+  position: number,
+  title: string
+): Record<string, string> {
+  const entry: Record<string, string> = {};
+  for (const placeholder of placeholders) {
+    entry[placeholder.name] =
+      `[MOCK] ${placeholder.name} ${position} — ${title}`.slice(0, 120);
+  }
+  return entry;
 }
 
 const MOCK_HASHTAGS = [
@@ -215,4 +235,158 @@ export async function generateNowCarousel(
   }
 
   return { slides, caption, hashtags };
+}
+
+/**
+ * Tokens die de applicatie zelf invult: de foto, de layoutrichting, het
+ * volgnummer en het aantal items. Een regeneratie neemt die ongewijzigd over
+ * uit de bestaande slide, zodat beeld en nummering niet verspringen.
+ */
+function isAutoFilled(placeholder: NowPlaceholderSpec): boolean {
+  return Boolean(
+    placeholder.isUrl ||
+      placeholder.enumValues ||
+      placeholder.zeroPadTo ||
+      placeholder.autoCount
+  );
+}
+
+/** validateNowSlides nummert vanaf de arraypositie; dit zet het echte nummer terug. */
+function relabel(problems: string[], slideIndex: number): string[] {
+  return problems.map((problem) =>
+    problem.replace(/^Slide 1\b/, `Slide ${slideIndex + 1}`)
+  );
+}
+
+/**
+ * Herschrijft de tekst van één slide van een bestaande NOW-carousel; alle
+ * andere slides blijven ongemoeid. Het model krijgt het artikel plus een korte
+ * samenvatting van de overige slides mee, zodat de nieuwe tekst niet herhaalt
+ * wat er al staat.
+ *
+ * Gooit SlideNotFoundError (index bestaat niet), MissingOpenAiKeyError,
+ * InvalidSlideOutputError (model-output faalde het schema) of
+ * InvalidNowSlidesError (resultaat past niet bij het manifest).
+ */
+export async function regenerateNowSlide(
+  article: NowArticleLike,
+  family: NowTemplateFamily,
+  slides: readonly NowStoredSlide[],
+  slideIndex: number
+): Promise<NowStoredSlide> {
+  const target = slides.find((slide) => slide.index === slideIndex);
+  if (!target) {
+    throw new SlideNotFoundError(slideIndex);
+  }
+
+  // Een slide mag het template van een andere familie lenen, dus resolve per
+  // slide in plaats van de familie van de carousel aan te nemen.
+  const resolved = slideTemplateFamily(family, target);
+  let spec: NowTemplateSpec;
+  try {
+    spec = getNowTemplateSpec(resolved, target.slideType);
+  } catch {
+    throw new InvalidNowSlidesError([
+      `Slide ${slideIndex + 1}: onbekend slidetype "${target.slideType}" voor familie ${resolved}.`,
+    ]);
+  }
+
+  const writable = textPlaceholders(resolved, target.slideType);
+  const written = await writeNowSlideText(article, family, slides, slideIndex, {
+    resolved,
+    slideType: target.slideType,
+    writable,
+  });
+
+  const values: Record<string, string> = {};
+  for (const placeholder of spec.placeholders) {
+    values[placeholder.name] = isAutoFilled(placeholder)
+      ? (target.values[placeholder.name] ?? "")
+      : cleanNowText(
+          written[placeholder.name] ?? target.values[placeholder.name] ?? ""
+        );
+  }
+
+  const slide: NowStoredSlide = {
+    index: target.index,
+    slideType: target.slideType,
+    values,
+    ...(target.family ? { family: target.family } : {}),
+  };
+
+  const problems = validateNowSlides(family, [slide]);
+  if (problems.length > 0) {
+    throw new InvalidNowSlidesError(relabel(problems, slideIndex));
+  }
+
+  return slide;
+}
+
+/**
+ * De modelaanroep achter regenerateNowSlide: levert alleen de tekstvelden van
+ * de gevraagde slide. Slides zonder tekstveld (een volledig vormgegeven CTA)
+ * en MOCK_AI=1 slaan de aanroep over, net als generateNowCarousel.
+ */
+async function writeNowSlideText(
+  article: NowArticleLike,
+  family: NowTemplateFamily,
+  slides: readonly NowStoredSlide[],
+  slideIndex: number,
+  target: {
+    resolved: NowTemplateFamily;
+    slideType: NowStoredSlide["slideType"];
+    writable: NowPlaceholderSpec[];
+  }
+): Promise<Record<string, string>> {
+  if (target.writable.length === 0) {
+    return {};
+  }
+
+  // --- MOCK PATH (test/dev only) — zie generateNowCarousel. ---
+  if (process.env.MOCK_AI === "1") {
+    return buildMockValues(target.writable, slideIndex + 1, article.title);
+  }
+  // --- END MOCK PATH ---
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new MissingOpenAiKeyError();
+  }
+
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const placeholder of target.writable) {
+    shape[placeholder.name] = z
+      .string()
+      .max(400)
+      .describe(placeholder.description);
+  }
+
+  const openai = createOpenAI({ apiKey });
+  const model = openai(process.env.OPENAI_MODEL || DEFAULT_MODEL);
+
+  try {
+    const result = await generateObject({
+      model,
+      schema: z.object(shape),
+      system: buildNowSlideSystemPrompt(
+        target.resolved,
+        target.slideType,
+        target.writable
+      ),
+      prompt: buildNowSlideUserPrompt(
+        {
+          title: article.title,
+          excerpt: article.excerpt ?? "",
+          content: stripHtml(article.content),
+        },
+        family,
+        slides,
+        slideIndex,
+        (slide) => slideTemplateFamily(family, slide)
+      ),
+    });
+    return result.object as Record<string, string>;
+  } catch (error) {
+    throw new InvalidSlideOutputError(error);
+  }
 }
