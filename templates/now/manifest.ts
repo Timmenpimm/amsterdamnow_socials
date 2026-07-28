@@ -12,6 +12,12 @@
  * are used as-is: {{placeholder}} tokens get string-replaced, then the file
  * is screenshotted at its exact pixel size (lib/renderer-now.ts). Do not
  * reimplement the markup; this manifest only describes it.
+ *
+ * Een placeholder-vlag bepaalt wie een token vult. isUrl, enumValues,
+ * zeroPadTo, autoCount en fromArticleTitle worden door de applicatie ingevuld
+ * (zie de opsomming bovenin lib/now-carousel.ts); al het overige schrijft het
+ * model. De redacteur kan alles behalve de genummerde tokens naderhand met de
+ * hand bijstellen in de carousel-editor.
  */
 
 export type NowTemplateFamily =
@@ -59,6 +65,13 @@ export interface NowPlaceholderSpec {
    */
   autoCount?: boolean;
   /**
+   * Wordt gevuld met de letterlijke artikeltitel (de WordPress-titel), nooit
+   * door het model geschreven. De coverslide toont de kop dus woordelijk zoals
+   * hij op de site staat, in plaats van een bedachte korte hook. De redacteur
+   * mag hem in de editor met de hand inkorten.
+   */
+  fromArticleTitle?: boolean;
+  /**
    * The design contract lets the editor place a literal <br> in this token to
    * control where the line breaks (see docs/design/social-templates/
    * CAROUSEL_PLACEHOLDERS.md). The value is still HTML-escaped; only <br> is
@@ -98,7 +111,11 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
     placeholders: [
       { name: 'cover_image_url', description: 'Full-bleed cover photo URL', isUrl: true },
       { name: 'categorie', description: 'Red uppercase category label, e.g. "RESTAURANT"' },
-      { name: 'titel_hook', description: 'Large white headline, max ~6 words' },
+      {
+        name: 'titel_hook',
+        description: 'Large white headline — the article title, verbatim',
+        fromArticleTitle: true,
+      },
     ],
     reuse: { min: 1, max: 1, description: 'Always slide 1 of the hotspot carousel.' },
   },
@@ -156,7 +173,11 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
         autoCount: true,
       },
       { name: 'categorie', description: 'Kicker label next to the number' },
-      { name: 'kop', description: 'White headline, max 4 words' },
+      {
+        name: 'kop',
+        description: 'White headline — the article title, verbatim',
+        fromArticleTitle: true,
+      },
     ],
     reuse: { min: 1, max: 1, description: 'Always slide 1 of the lijstje carousel.' },
   },
@@ -206,7 +227,11 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
     placeholders: [
       { name: 'event_image_url', description: 'Full-bleed event photo', isUrl: true },
       { name: 'datum', description: 'Date, white uppercase, e.g. "VRIJDAG 23 MEI"' },
-      { name: 'event_titel', description: 'White headline, max 5 words' },
+      {
+        name: 'event_titel',
+        description: 'White headline — the article title, verbatim',
+        fromArticleTitle: true,
+      },
     ],
     reuse: { min: 1, max: 1, description: 'Always frame 1.' },
   },
@@ -261,7 +286,9 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
       { name: 'datum', description: 'Red date bar, single line, e.g. "25 JUL — 16 AUG"' },
       {
         name: 'event_titel',
-        description: 'Event title, max ~3 lines of ~20 characters; <br> allowed',
+        description:
+          'Event title — the article title, verbatim; max ~3 lines of ~20 characters, <br> allowed',
+        fromArticleTitle: true,
         allowsLineBreak: true,
       },
       { name: 'locatie', description: 'Venue and area, e.g. "NDSM — AMSTERDAM NOORD"' },
@@ -322,7 +349,9 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
       { name: 'kicker', description: 'Uppercase kicker, e.g. "BUURTEN / WEST"' },
       {
         name: 'gids_titel',
-        description: 'Guide title; <br> allowed to control line breaks',
+        description:
+          'Guide title — the article title, verbatim; <br> allowed to control line breaks',
+        fromArticleTitle: true,
         allowsLineBreak: true,
       },
       { name: 'gids_sub', description: 'Guide subtitle' },
@@ -371,7 +400,12 @@ export const NOW_TEMPLATE_MANIFEST: readonly NowTemplateSpec[] = [
     dimensions: LIJSTJE_DIMENSIONS,
     placeholders: [
       { name: 'cover_image_url', description: 'Full-bleed cover photo URL', isUrl: true },
-      { name: 'editie_titel', description: 'Edition title, e.g. "DE BESTE HOTSPOTS VAN JULI 2026"' },
+      {
+        name: 'editie_titel',
+        description:
+          'Edition title — the article title, verbatim, e.g. "DE BESTE HOTSPOTS VAN JULI 2026"',
+        fromArticleTitle: true,
+      },
       { name: 'editie_footer', description: 'Kicker line above the title' },
     ],
     reuse: {
