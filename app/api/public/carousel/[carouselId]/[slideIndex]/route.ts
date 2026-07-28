@@ -57,9 +57,13 @@ const DEFAULT_BRAND_SETTINGS: BrandSettings = {
 };
 
 const JPEG_QUALITY = 90;
-// Slide images only change when the carousel is re-edited, and each
-// publish run mints a fresh HMAC token anyway — safe to cache aggressively.
-const CACHE_CONTROL = "public, max-age=31536000, immutable";
+// s-maxage lets Vercel's CDN cache the JPEG too (max-age alone only caches
+// in the client): the publish flow pre-warms these URLs so Meta's own
+// fetches hit the CDN instead of triggering a fresh Chromium render. Safe
+// despite the deterministic HMAC token because publish URLs carry a `v=`
+// cache-buster derived from Carousel.updatedAt (lib/public-render.ts) —
+// an edited carousel publishes under fresh URLs, never the stale cache.
+const CACHE_CONTROL = "public, max-age=31536000, s-maxage=31536000, immutable";
 
 export async function GET(request: Request, { params }: RouteParams) {
   const { carouselId, slideIndex: slideIndexParam } = await params;

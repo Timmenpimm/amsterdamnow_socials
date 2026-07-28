@@ -36,10 +36,36 @@ export { CarouselNotFoundError };
 export class CarouselNotApprovedError extends Error {
   constructor(status: CarouselStatus) {
     super(
-      `Carousel must be approved before publishing (current status: ${status}).`
+      status === "PUBLISHING"
+        ? "This carousel is already being published — wait a moment and refresh."
+        : `Carousel must be approved before publishing (current status: ${status}).`
     );
     this.name = "CarouselNotApprovedError";
   }
+}
+
+/**
+ * A PUBLISHING carousel whose row hasn't been touched for this long is
+ * considered a crashed run, not a live one: Vercel kills the publish
+ * function at maxDuration (300s, see app/api/instagram/publish/route.ts),
+ * so nothing legitimate can still be running after 10 minutes. Without
+ * this escape hatch a killed run left the carousel stuck in PUBLISHING
+ * forever — publish demanded APPROVED and nothing ever reset the status.
+ */
+const STALE_PUBLISHING_MS = 10 * 60 * 1000;
+
+/**
+ * May a publish run start from this status? APPROVED is the normal case,
+ * FAILED is an explicit retry, and a *stale* PUBLISHING row is a crashed
+ * run being recovered. A fresh PUBLISHING row keeps 409'ing so a double
+ * click can't start two overlapping runs.
+ */
+function canStartPublish(carousel: { status: CarouselStatus; updatedAt: Date }): boolean {
+  if (carousel.status === "APPROVED" || carousel.status === "FAILED") return true;
+  return (
+    carousel.status === "PUBLISHING" &&
+    Date.now() - carousel.updatedAt.getTime() > STALE_PUBLISHING_MS
+  );
 }
 
 /** Thrown when the user has no saved Instagram connection yet. */
@@ -104,7 +130,7 @@ export async function publishCarouselForUser(
 
   const carousel = await getCarouselForUser(carouselId, userId);
 
-  if (carousel.status !== "APPROVED") {
+  if (!canStartPublish(carousel)) {
     throw new CarouselNotApprovedError(carousel.status);
   }
 
@@ -126,13 +152,17 @@ export async function publishCarouselForUser(
 
   const slideImageUrls = [...slideIndexes.data]
     .sort((a, b) => a.index - b.index)
-    .map((slide) => publicSlideUrl(baseUrl, carousel.id, slide.index));
+    .map((slide) =>
+      publicSlideUrl(baseUrl, carousel.id, slide.index, carousel.updatedAt.getTime())
+    );
 
   const caption = buildCaption(carousel.caption, carousel.hashtags);
 
   await setCarouselStatus(carousel.id, "PUBLISHING");
 
   try {
+    await warmSlideRenders(slideImageUrls);
+
     const { mediaId } = await publishCarousel({
       igUserId: credentials.businessAccountId,
       accessToken: credentials.accessToken,
@@ -146,6 +176,44 @@ export async function publishCarouselForUser(
     await setCarouselStatus(carousel.id, "FAILED");
     throw toPublishError(error);
   }
+}
+
+/**
+ * Pre-renders every slide before any Graph API call. Instagram fetches the
+ * slide URLs itself while processing each item container, and a NOW slide
+ * that isn't cached yet renders on demand with Chromium — seconds per
+ * slide, which serially across 10 slides blew straight through the publish
+ * function's time budget (the original cause of runs dying mid-publish).
+ * Warming them here populates the CDN cache (the public render route sends
+ * s-maxage) so Meta's own fetches are instant. A slide that fails to render
+ * would fail its container anyway, so a non-OK response aborts the publish
+ * while the FAILED status write still runs.
+ */
+const WARM_CONCURRENCY = 3;
+
+async function warmSlideRenders(slideImageUrls: string[]): Promise<void> {
+  if (process.env.MOCK_INSTAGRAM === "1") return; // test URLs are not real
+
+  const queue = [...slideImageUrls];
+  const workers = Array.from(
+    { length: Math.min(WARM_CONCURRENCY, queue.length) },
+    async () => {
+      let url: string | undefined;
+      while ((url = queue.shift())) {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (!response.ok) {
+          throw new Error(
+            `Slide render failed while preparing publish (HTTP ${response.status}).`
+          );
+        }
+        // Drain the body so the connection is released.
+        await response.arrayBuffer();
+      }
+    }
+  );
+  await Promise.all(workers);
 }
 
 function toPublishError(error: unknown): Error {
