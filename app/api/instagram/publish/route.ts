@@ -20,7 +20,11 @@ import {
 // with the render pipeline transitively via lib/instagram-publish.ts, so
 // keep it on the Node runtime for consistency.
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Publishing is slow by nature: pre-warming up to 10 slide renders plus
+// Meta's per-container processing polls. 60s proved too tight — Vercel
+// killed real runs mid-publish, stranding carousels in PUBLISHING (see
+// STALE_PUBLISHING_MS in lib/instagram-publish.ts for the recovery path).
+export const maxDuration = 300;
 
 const publishRequestSchema = z.object({
   carouselId: z.string().trim().min(1, "carouselId is required"),

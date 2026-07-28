@@ -47,11 +47,19 @@ function sign(carouselId: string, slideIndex: number): string {
 export function publicSlideUrl(
   baseUrl: string,
   carouselId: string,
-  slideIndex: number
+  slideIndex: number,
+  /**
+   * Cache-buster mixed into the URL (use Carousel.updatedAt). The HMAC
+   * token is deterministic and the route's Cache-Control lets the CDN
+   * cache the JPEG, so without a version a re-publish after editing
+   * slides would serve Meta the stale cached render.
+   */
+  version?: number
 ): string {
   const token = sign(carouselId, slideIndex);
   const path = `/api/public/carousel/${encodeURIComponent(carouselId)}/${slideIndex}`;
-  return `${baseUrl.replace(/\/+$/, "")}${path}?t=${token}`;
+  const versionParam = version !== undefined ? `&v=${version}` : "";
+  return `${baseUrl.replace(/\/+$/, "")}${path}?t=${token}${versionParam}`;
 }
 
 /**
