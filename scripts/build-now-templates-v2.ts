@@ -65,6 +65,65 @@ const BASE_CSS = `
 .logo{filter:drop-shadow(0 3px 20px rgba(0,0,0,.45))}
 `.trim();
 
+/**
+ * Cover slides carry the WordPress article title verbatim (manifest flag
+ * `fromArticleTitle`), so the headline is 60-90 characters instead of the 3-5
+ * words the rest of the family gets. Three things follow from that.
+ *
+ * 1. HOOGTEBUDGET IN PLAATS VAN EEN MEEBEWEGENDE BAND. The band is anchored on
+ *    its bottom edge (`bottom:168px`, no `top`), so it already grows upward
+ *    only: the quote line, the place line and the logo never move, whatever
+ *    the headline does. `.band.m` would grow both ways, which is exactly why
+ *    the covers do not use it. What the headline still needs is a ceiling, so
+ *    it cannot climb into the red tag/badge:
+ *
+ *      band bottom                      y = 1350 - 168      = 1182
+ *      onder de kop: gap 34 + quote-marge -14 + quote 2x51  = 122,5
+ *      kop-onderkant                    y = 1182 - 122,5    = 1059,5
+ *      kop-bovenkant bij het budget     y = 1059,5 - 420    =   639,5
+ *      streep erboven (12 + gap 34)     y = 639,5 - 46      =   593,5
+ *      onderkant rode tag (2 regels) / badge   y ≈ 154 / 173
+ *      => 420px laat ruim 400px lucht tussen badge en streep.
+ *
+ *    Bij een lege quote valt die 122,5 weg en zakt de kop juist naar beneden
+ *    (bovenkant y = 762), dus dat geval is nooit het krapste.
+ *
+ *    Waarom 420 en niet meer: de kop zoekt zelf de grootste maat die past
+ *    (`data-autofit`). Barlow Condensed uppercase doet op 900px breedte
+ *    ~2180/fontmaat tekens per regel; met woordafbreking blijft daar ~1860
+ *    van over. Een titel van 89 tekens landt daarmee op 5 regels van ~97px
+ *    (5 x 0,86 x 97 = 417), een van 120 tekens op 6 regels van ~81px. Een
+ *    ruimer budget levert alleen grotere letters bij dezelfde regelval en
+ *    duwt de kop het beeld uit; een krapper budget maakt hem onnodig klein.
+ *    Ondergrens 68px, en `-webkit-line-clamp:6` vangt het absurde geval
+ *    (>160 tekens) af met een beletselteken in plaats van een halve regel.
+ *
+ * 2. DE SLUIER MOET MET DE KOP MEEGROEIEN. De vaste `.veil` begint op 62% van
+ *    onderen (y=513) en staat op y=640 pas op ~0,05 dekking: precies waar de
+ *    bovenste regel van een lange kop terechtkomt, en dus onleesbaar op een
+ *    lichte foto. Een vaste sluier die dáár al donker is, slibt de korte-kop-
+ *    variant dicht. Daarom hangt de sluier op de band zelf (`.band.hero::before`,
+ *    van 150px boven de band tot de onderrand van de slide) met stops in px:
+ *    de inloop is altijd even lang, en de donkere zone is precies zo hoog als
+ *    de kop die er staat. Onderin eindigt hij op .66, waar de oude `.veil` op
+ *    .62 uitkwam — de plaatsregel en het logo staan er dus net zo bij als
+ *    voorheen.
+ *
+ * 3. ROOD OP EEN MIDDENTOON-FOTO. #E90000 heeft tegen een grijsblauwe gracht
+ *    nauwelijks contrast. De covers krijgen daarom een korte topsluier (24%,
+ *    .34 -> 0) onder de tag/badge plus een slagschaduw op het blokje zelf,
+ *    zodat de rand van het rode vlak altijd afsteekt zonder dat de foto
+ *    bovenin dichtloopt.
+ */
+const HERO_COVER_CSS = `
+.scrim{position:absolute;left:0;right:0;top:0;height:24%;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.34) 0%,rgba(0,0,0,.16) 46%,rgba(0,0,0,0) 100%)}
+.band.hero{z-index:1}
+.band.hero::before{content:'';position:absolute;z-index:-1;left:-72px;right:-72px;top:-150px;bottom:-168px;background:linear-gradient(180deg,rgba(0,0,0,0) 0px,rgba(0,0,0,.10) 60px,rgba(0,0,0,.34) 150px,rgba(0,0,0,.52) 240px,rgba(0,0,0,.60) 340px,rgba(0,0,0,.66) 100%)}
+.band.hero .hd{max-height:420px;-webkit-line-clamp:6}
+.tag,.badge{box-shadow:0 8px 34px rgba(0,0,0,.45)}
+.place,.logo{z-index:2}
+`.trim();
+
 /** Two values on one bottom-left line, with a middot that disappears with either half. */
 const PLACE_PAIR_CSS = `
 .place .pb:not(:empty)::before{content:'\\00B7';padding:0 14px;opacity:.55}
@@ -95,14 +154,14 @@ interface TemplateBuild {
 const TEMPLATES: TemplateBuild[] = [
   {
     file: 'agenda_cover.html',
-    css: PLACE_PAIR_CSS,
+    css: [HERO_COVER_CSS, PLACE_PAIR_CSS].join('\n'),
     body: `<div class="s">
   <div class="photo" style="background-image:url('{{cover_image_url}}')"></div>
-  <div class="veil"></div>
+  <div class="scrim"></div>
   <div class="tag">{{kicker}}</div>
-  <div class="band">
+  <div class="band hero">
     <div class="rule"></div>
-    <h1 class="hd clamp">{{event_titel}}</h1>
+    <h1 class="hd clamp" data-autofit data-autofit-min="68">{{event_titel}}</h1>
     <div class="quote clamp">{{quote}}</div>
   </div>
   <div class="place"><span class="pa">{{datum}}</span><span class="pb">{{locatie}}</span></div>
@@ -164,6 +223,7 @@ const TEMPLATES: TemplateBuild[] = [
     // The count and its label together make the red block top-right.
     file: 'lijstje_cover.html',
     css: `
+${HERO_COVER_CSS}
 .badge{position:absolute;top:64px;right:64px;min-width:104px;max-width:300px;background:var(--accent);color:#fff;padding:12px 18px 14px;text-align:center;font-family:var(--display);font-weight:700;text-transform:uppercase}
 .badge b{display:block;font-size:60px;line-height:.9;letter-spacing:.5px}
 .badge span{display:block;font-size:28px;line-height:1.05;letter-spacing:2px}
@@ -172,11 +232,11 @@ const TEMPLATES: TemplateBuild[] = [
 `.trim(),
     body: `<div class="s">
   <div class="photo" style="background-image:url('{{cover_image_url}}')"></div>
-  <div class="veil"></div>
+  <div class="scrim"></div>
   <div class="badge"><b>{{aantal_items}}</b><span>{{categorie}}</span></div>
-  <div class="band">
+  <div class="band hero">
     <div class="rule"></div>
-    <h1 class="hd clamp">{{kop}}</h1>
+    <h1 class="hd clamp" data-autofit data-autofit-min="68">{{kop}}</h1>
     <div class="quote clamp">{{quote}}</div>
   </div>
   __LOGO__
@@ -200,13 +260,14 @@ const TEMPLATES: TemplateBuild[] = [
   { file: 'lijstje_cta.html', css: CTA_CSS, body: CTA_BODY },
   {
     file: 'lijstje_editie_cover.html',
+    css: HERO_COVER_CSS,
     body: `<div class="s">
   <div class="photo" style="background-image:url('{{cover_image_url}}')"></div>
-  <div class="veil"></div>
+  <div class="scrim"></div>
   <div class="tag">{{editie_footer}}</div>
-  <div class="band">
+  <div class="band hero">
     <div class="rule"></div>
-    <h1 class="hd sm clamp">{{editie_titel}}</h1>
+    <h1 class="hd sm clamp" data-autofit data-autofit-min="68">{{editie_titel}}</h1>
     <div class="quote clamp">{{quote}}</div>
   </div>
   __LOGO__
@@ -215,13 +276,14 @@ const TEMPLATES: TemplateBuild[] = [
 
   {
     file: 'gids_cover.html',
+    css: HERO_COVER_CSS,
     body: `<div class="s">
   <div class="photo" style="background-image:url('{{cover_image_url}}')"></div>
-  <div class="veil"></div>
+  <div class="scrim"></div>
   <div class="tag">{{kicker}}</div>
-  <div class="band">
+  <div class="band hero">
     <div class="rule"></div>
-    <h1 class="hd clamp">{{gids_titel}}</h1>
+    <h1 class="hd clamp" data-autofit data-autofit-min="68">{{gids_titel}}</h1>
     <div class="quote clamp">{{gids_sub}}</div>
   </div>
   __LOGO__

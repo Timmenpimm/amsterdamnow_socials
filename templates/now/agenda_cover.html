@@ -32,16 +32,22 @@
 .hd,.quote,.num,.place{text-shadow:0 2px 28px rgba(0,0,0,.55)}
 .rule{box-shadow:0 3px 26px rgba(0,0,0,.42)}
 .logo{filter:drop-shadow(0 3px 20px rgba(0,0,0,.45))}
+.scrim{position:absolute;left:0;right:0;top:0;height:24%;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.34) 0%,rgba(0,0,0,.16) 46%,rgba(0,0,0,0) 100%)}
+.band.hero{z-index:1}
+.band.hero::before{content:'';position:absolute;z-index:-1;left:-72px;right:-72px;top:-150px;bottom:-168px;background:linear-gradient(180deg,rgba(0,0,0,0) 0px,rgba(0,0,0,.10) 60px,rgba(0,0,0,.34) 150px,rgba(0,0,0,.52) 240px,rgba(0,0,0,.60) 340px,rgba(0,0,0,.66) 100%)}
+.band.hero .hd{max-height:420px;-webkit-line-clamp:6}
+.tag,.badge{box-shadow:0 8px 34px rgba(0,0,0,.45)}
+.place,.logo{z-index:2}
 .place .pb:not(:empty)::before{content:'\00B7';padding:0 14px;opacity:.55}
 .place .pa:empty+.pb::before{content:none}
 </style></head><body>
 <div class="s">
   <div class="photo" style="background-image:url('{{cover_image_url}}')"></div>
-  <div class="veil"></div>
+  <div class="scrim"></div>
   <div class="tag">{{kicker}}</div>
-  <div class="band">
+  <div class="band hero">
     <div class="rule"></div>
-    <h1 class="hd clamp">{{event_titel}}</h1>
+    <h1 class="hd clamp" data-autofit data-autofit-min="68">{{event_titel}}</h1>
     <div class="quote clamp">{{quote}}</div>
   </div>
   <div class="place"><span class="pa">{{datum}}</span><span class="pb">{{locatie}}</span></div>
