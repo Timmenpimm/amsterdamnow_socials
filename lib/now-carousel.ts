@@ -313,7 +313,7 @@ export function buildNowSlides(
           values[placeholder.name] = String(positionInStep + 1);
           continue;
         }
-        values[placeholder.name] = cleanText(textValues[placeholder.name] ?? "");
+        values[placeholder.name] = cleanNowText(textValues[placeholder.name] ?? "");
       }
 
       slides.push({
@@ -331,9 +331,10 @@ export function buildNowSlides(
 /**
  * Trims a model-written value and drops <br> tags at the start or end. The
  * model tends to append one to every field whose description mentions that
- * <br> is allowed, which renders as an empty line under the text.
+ * <br> is allowed, which renders as an empty line under the text. Exported so
+ * single-slide regeneration (lib/now-generator.ts) cleans identically.
  */
-function cleanText(value: string): string {
+export function cleanNowText(value: string): string {
   return value
     .replace(/^(?:\s*<br\s*\/?>)+/gi, "")
     .replace(/(?:<br\s*\/?>\s*)+$/gi, "")
