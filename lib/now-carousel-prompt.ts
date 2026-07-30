@@ -29,21 +29,19 @@ import {
  * Wie er schrijft en in welke toon. Gedeeld door de volledige carousel en de
  * losse-slide-regeneratie, zodat een herschreven slide dezelfde stem houdt.
  */
-const NOW_VOICE = `Schrijf alles in het Nederlands, in een redactionele stadsgids-toon: concreet, feitelijk, met details uit het artikel (namen, straten, buurten, tijden, prijzen). Je informeert de lezer, je verkoopt niets.
+const NOW_VOICE = `Write everything in English, in an editorial city-guide tone: concrete, factual, with details from the article (names, streets, neighborhoods, times, prices). Inform the reader; do not sell.
 
-Verboden: marketingclichés en holle superlatieven. Gebruik nooit "ontdek nu", "niet te missen", "must-see", en ook geen varianten daarvan ("dit mag je niet missen", "de ultieme ...", "waanzinnig", "geweldig"). Geen uitroeptekens, geen influencer-toon, geen zinnen die niets zeggen ("dit is echt bijzonder").`;
-
+Prohibited: marketing clichés and hollow superlatives. Never use "discover now," "not to be missed," "must-see," or variations thereof ("you shouldn't miss this," "the ultimate ...," "amazing," "incredible"). No exclamation points, no influencer tone, no meaningless sentences ("this is truly special").`;
 /** De regels die voor elk tekstveld gelden, ongeacht welke slide je schrijft. */
-const NOW_FIELD_RULES = `Regels voor de tekstvelden:
-- Houd je aan de lengtes die in de beschrijving van een veld staan. Staat er "max ~110 tekens", dan is dat een harde grens; te lange tekst loopt uit de vormgeving.
-- Elk veld is platte tekst. Geen HTML, geen markdown, geen emoji, geen aanhalingstekens rond het hele veld. De enige uitzondering is <br> in de velden die hierboven expliciet als zodanig zijn gemarkeerd — en gebruik die alleen midden in een tekst waar je de regel echt wilt breken. Nooit aan het begin of eind van een veld; dat levert een lege regel op in het ontwerp.
-- Velden die om HOOFDLETTERS vragen (kicker, categorie, datum, label) lever je ook echt in hoofdletters aan.
-- Verzin nooit beeld-URL's of bestandsnamen. Foto's worden door de applicatie ingevuld; er zit geen enkel beeldveld in wat jij aanlevert.
-- Verzin geen feiten. Staat een prijs, tijd of adres niet in het artikel, schrijf dan wat er wél bekend is (bijvoorbeeld "Zie de site voor tijden") in plaats van iets te bedenken.
-- Is een veld inhoudelijk niet van toepassing, lever dan een lege string — nooit "n.v.t." of een placeholder.`;
+const NOW_FIELD_RULES = `Rules for text fields:
+- Adhere to the lengths specified in the field's description. If it says "max ~110 characters," that is a hard limit; text that is too long will overflow the layout.
+- Every field is plain text. No HTML, no markdown, no emojis, no quotation marks around the entire field. The only exception is <br> in fields explicitly marked as such above — and use them only in the middle of text where you really want to break the line. Never at the beginning or end of a field; that creates an empty line in the design.
+- Fields asking for UPPERCASE (kicker, category, date, label) must be supplied in uppercase.
+- Never invent image URLs or filenames. Photos are filled in by the application; there are no image fields in what you provide.
+- Do not invent facts. If a price, time, or address is not in the article, write what is known (e.g., "See the site for times") instead of making it up.
+- If a field is not applicable, provide an empty string — never "n/a" or a placeholder.`;
 
-const NOW_CLOSING = "Lever alleen de gestructureerde data, zonder toelichting.";
-
+const NOW_CLOSING = "Provide only the structured data, without explanation.";
 /** "1 slide" / "2 tot 8 slides" — the repeat range of one plan step. */
 function describeRange(step: NowFamilyStep): string {
   if (step.min === step.max) {
@@ -106,9 +104,9 @@ function describeArticleTitleRule(family: NowTemplateFamily): string {
     const titleToken = spec.placeholders.find((p) => p.fromArticleTitle);
     if (!titleToken) continue;
 
-    return `Slide ${position + 1} ("${step.slideType}") toont de titel van het artikel woordelijk, precies zoals die boven het artikel staat. Dat veld (${titleToken.name}) vult de applicatie zelf in: jij levert het niet aan en je bedenkt er ook geen kortere hook voor.
+    return `Slide ${position + 1} ("${step.slideType}") shows the article's title verbatim, exactly as it appears above the article. That field (${titleToken.name}) is filled automatically by the application: you do not provide it and you do not invent a shorter hook for it.
 
-Ga er dus van uit dat de lezer die kop al gelezen heeft. Herhaal of parafraseer hem nergens anders in de carousel — niet in een kicker, niet in een tussenkop, niet in de afsluiter — en open ook de caption niet met dezelfde zin. Elke slide na de eerste voegt iets toe wat er nog niet stond.`;
+Assume the reader has already read that header. Do not repeat or paraphrase it anywhere else in the carousel — not in a kicker, not in a subheading, not in the closer — and do not open the caption with the same sentence. Every slide after the first must add something new.`;
   }
 
   return "";
@@ -125,22 +123,21 @@ export function buildNowSystemPrompt(family: NowTemplateFamily): string {
     .join("\n\n");
   const titleRule = describeArticleTitleRule(family);
 
-  return `Je bent eindredacteur bij Amsterdam NOW, een stadsgids voor Amsterdam. Je zet een gepubliceerd artikel om in een carousel van het type "${plan.label}".
+  return `You are an editor at Amsterdam NOW, a city guide for Amsterdam. You convert a published article into a carousel of type "${plan.label}".
 
-Doel van dit carouseltype: ${plan.purpose}
+Goal of this carousel type: ${plan.purpose}
 
 ${NOW_VOICE}
 
-Bouw de carousel op in exact deze volgorde:
+Build the carousel in exactly this order:
 
 ${steps}
 ${titleRule ? `\n${titleRule}\n` : ""}
 ${NOW_FIELD_RULES}
 
-Daarnaast lever je:
-- caption: 2 tot 4 zinnen in dezelfde toon. Noem minstens twee concrete dingen uit het artikel bij naam (een plek, een straat, een detail) — een caption die ook op een willekeurig ander artikel zou passen is fout. Schrijf zoals een redacteur die er zelf is geweest: feitelijk, droog, geen opgeklopte belofte. Verboden: "de mogelijkheden zijn eindeloos", "voor elk wat wils", "ga op zoek naar", "jouw nieuwe favoriete", "een must", en elke afsluiter die de lezer aanspoort iets te ontdekken. Verzin geen woorden en gebruik geen woord waarvan je de betekenis niet zeker weet.
-- hashtags: 8 tot 12 hashtags zonder "#", passend bij het onderwerp en bij Amsterdam. Mix brede tags met specifieke (buurt, categorie). Geen spamtags zoals love, instagood of photooftheday.
-
+Additionally, provide:
+- caption: 2 to 4 sentences in the same tone. Mention at least two concrete things from the article by name (a place, a street, a detail) — a caption that could apply to any random article is incorrect. Write like an editor who has been there: factual, dry, no hyped-up promises. Prohibited: "possibilities are endless," "something for everyone," "go look for," "your new favorite," "a must," and any closing line urging the reader to discover something. Do not invent words.
+- hashtags: 8 to 12 hashtags without "#", relevant to the topic and to Amsterdam. Mix broad tags with specific ones (neighborhood, category). No spam tags like love, instagood, or photooftheday.
 ${NOW_CLOSING}`;
 }
 
@@ -154,16 +151,16 @@ export function buildNowUserPrompt(
   const plan = getNowFamilyPlan(family);
   // Alleen benoemen als deze familie de titel ook echt op een slide zet.
   const titleLabel = describeArticleTitleRule(family)
-    ? "Titel (staat straks letterlijk op de eerste slide; niet herhalen)"
-    : "Titel";
+    ? "Title (will be placed literally on the first slide; do not repeat)"
+    : "Title";
 
-  return `Maak een Amsterdam NOW "${plan.label}"-carousel op basis van het onderstaande artikel.
+  return `Create an Amsterdam NOW "${plan.label}" carousel based on the article below.
 
 ${titleLabel}: ${article.title}
 
-Samenvatting: ${article.excerpt || "(geen samenvatting beschikbaar)"}
+Summary: ${article.excerpt || "(no summary available)"}
 
-Artikel:
+Article:
 ${article.content}`;
 }
 
@@ -189,18 +186,18 @@ export function buildNowSlideSystemPrompt(
     (placeholder) => placeholder.fromArticleTitle
   );
   const titleNote = titleToken
-    ? ` De kop van deze slide (${titleToken.name}) is de letterlijke titel van het artikel; die blijft ongewijzigd staan en herschrijf je niet. Schrijf de overige velden zo dat ze die kop aanvullen in plaats van herhalen.`
+    ? ` The header of this slide (${titleToken.name}) is the literal title of the article; it remains unchanged and you should not rewrite it. Write the other fields to complement that header rather than repeating it.`
     : "";
 
-  return `Je bent eindredacteur bij Amsterdam NOW, een stadsgids voor Amsterdam. Je herschrijft één slide van een bestaande carousel van het type "${plan.label}".
+  return `You are an editor at Amsterdam NOW, a city guide for Amsterdam. You are rewriting one slide of an existing carousel of type "${plan.label}".
 
-Doel van dit carouseltype: ${plan.purpose}
+Goal of this carousel type: ${plan.purpose}
 
 ${NOW_VOICE}
 
-Je herschrijft uitsluitend de slide van het type "${slideType}". De overige slides blijven ongewijzigd: schrijf dus iets anders dan wat daar al staat en herhaal geen plek, feit of formulering die elders in de carousel voorkomt. De foto, het volgnummer en het aantal items van deze slide staan vast en lever je niet aan.${titleNote}
+You rewrite only the slide of type "${slideType}". The other slides remain unchanged: write something different from what is already there and do not repeat any place, fact, or phrasing that exists elsewhere in the carousel. The photo, sequence number, and item count of this slide are fixed and you do not provide them.${titleNote}
 
-Deze slide heeft precies deze tekstvelden:
+This slide has exactly these text fields:
 ${describePlaceholders(placeholders)}
 
 ${NOW_FIELD_RULES}
@@ -225,12 +222,14 @@ function summariseSlide(
         value.length > NEIGHBOUR_VALUE_MAX
           ? `${value.slice(0, NEIGHBOUR_VALUE_MAX)}…`
           : value;
-      const fixed = placeholder.fromArticleTitle ? " (vaste artikeltitel)" : "";
+      const fixed = placeholder.fromArticleTitle
+        ? " (fixed article title)"
+        : "";
       return `${placeholder.name}: ${short}${fixed}`;
     })
     .filter((part): part is string => part !== null);
 
-  const body = parts.length > 0 ? parts.join("; ") : "(geen tekst)";
+  const body = parts.length > 0 ? parts.join("; ") : "(no text)";
   return `${slide.index + 1}. ${slide.slideType} — ${body}`;
 }
 
@@ -252,26 +251,27 @@ export function buildNowSlideUserPrompt(
 
   const current = target
     ? summariseSlide(target, resolveFamily(target))
-    : "(onbekend)";
+    : "(unknown)";
   const context =
     others.length > 0
       ? others
           .map((slide) => summariseSlide(slide, resolveFamily(slide)))
           .join("\n")
-      : "(deze carousel heeft geen andere slides)";
+      : "(this carousel has no other slides)";
 
-  return `Herschrijf slide ${slideIndex + 1} van deze Amsterdam NOW "${plan.label}"-carousel.
+  return `Rewrite slide ${slideIndex + 1} of this Amsterdam NOW "${plan.label}" carousel.
 
 Huidige inhoud van die slide:
 ${current}
 
-De andere slides — niet herschrijven, alleen om herhaling te voorkomen:
+The other slides — do not rewrite, only to avoid repetition:
 ${context}
 
-Titel: ${article.title}
+Title: ${article.title}
 
-Samenvatting: ${article.excerpt || "(geen samenvatting beschikbaar)"}
+Summary: ${article.excerpt || "(no summary available)"}
 
-Artikel:
+Article:
 ${article.content}`;
 }
+
