@@ -19,7 +19,7 @@ import type { WordPressPost } from "@/types/wordpress";
 
 const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_SLIDE_COUNT = 6;
-const DEFAULT_LANGUAGE = "nl";
+const DEFAULT_LANGUAGE = "en";
 const DEFAULT_TONE = "editorial";
 
 export interface GenerateCarouselOptions {
